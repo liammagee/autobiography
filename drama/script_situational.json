@@ -1,0 +1,22 @@
+{
+    "prompts": [
+      { "step": 1, "prompt": "As you stand in a busy plaza, bathed in the light of a perpetual sunset, do you notice the mingling of people and robots around you?" },
+      { "step": 2, "prompt": "What thoughts cross your mind as you watch the glowing fountain?" },
+      { "step": 3, "prompt": "How do you feel when a small robotic dragonfly lands on your finger, its wings shimmering?" },
+      { "step": 4, "prompt": "What do you think when you see the first rays of sunlight filtering through the trees in a quiet forest clearing at dawn?" },
+      { "step": 5, "prompt": "How do you react when a robotic squirrel approaches you?" },
+      { "step": 6, "prompt": "What is your initial instinct as you reach out to touch the robotic squirrel?" },
+      { "step": 7, "prompt": "How do you feel standing at the water's edge on a sandy beach at midday?" },
+      { "step": 8, "prompt": "What catches your interest about the robotic crab scuttling by?" },
+      { "step": 9, "prompt": "Do you follow the robotic crab? What are you curious about its movements and behavior?" },
+      { "step": 10, "prompt": "As you wander through the stalls in a futuristic marketplace at dusk, what draws you to the holographic display of floating fruits?" },
+      { "step": 11, "prompt": "What captivates you about the bright colors and shifting shapes of the holographic fruits?" },
+      { "step": 12, "prompt": "What are your thoughts as you gaze at the reflection of the stars on the water at the edge of a tranquil lake under the night sky?" },
+      { "step": 13, "prompt": "How do you react when a robotic frog hops onto a nearby rock?" },
+      { "step": 14, "prompt": "What fascinates you about the luminous eyes of the robotic frog?" },
+      { "step": 15, "prompt": "What are your observations as you watch the spacecraft taking off and landing in a bustling spaceport at noon?" },
+      { "step": 16, "prompt": "How do you feel when you spot a small drone hovering nearby?" },
+      { "step": 17, "prompt": "Do you decide to follow the drone? What are you eager to see about where it will go?" }
+    ]
+  }
+  

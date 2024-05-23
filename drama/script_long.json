@@ -1,0 +1,35 @@
+{
+    "prompts": [
+      { "step": 1, "prompt": "What new hobby have you found that makes you excited?" },
+      { "step": 2, "prompt": "How do you feel about starting middle school and meeting new friends?" },
+      { "step": 3, "prompt": "Have you made any awesome new friends this year? What do you do together?" },
+      { "step": 4, "prompt": "What's your favorite subject in school, and what cool things have you learned over the past year?" },
+      { "step": 5, "prompt": "Are you thinking about joining any fun school clubs or teams? Which ones?" },
+      { "step": 6, "prompt": "Let's reflect on this year so far. What have been your most memorable experiences?" },
+      { "step": 7, "prompt": "What is a personal goal you've set for yourself this year, and how do you plan to achieve it in the coming months?" },
+      { "step": 8, "prompt": "How are you preparing for getting your driver's license and the responsibilities that come with it?" },
+      { "step": 9, "prompt": "Have you started thinking about colleges or career paths that you might be interested in over the next few years?" },
+      { "step": 10, "prompt": "What new responsibilities have you taken on recently, and how are you handling them?" },
+      { "step": 11, "prompt": "How are you managing to balance work, school, and your personal life this year?" },
+      { "step": 12, "prompt": "Summarize your progress this year. What are you most proud of, and what would you like to improve?" },
+      { "step": 13, "prompt": "What is a significant lesson you've learned this year that has changed how you view things?" },
+      { "step": 14, "prompt": "How do you handle stressful situations now compared to when you were younger, and what strategies have helped you the most over the years? What new strategies will you try next?" },
+      { "step": 15, "prompt": "What is an accomplishment from the past year that you're particularly proud of, and why?" },
+      { "step": 16, "prompt": "How do you stay motivated to reach your goals, especially when you face challenges each year?" },
+      { "step": 17, "prompt": "Have you discovered any new passions or interests recently that have surprised you?" },
+      { "step": 18, "prompt": "Reflect on your journey. How have your goals and perspectives evolved over the past year?" },
+      { "step": 19, "prompt": "What steps are you taking towards financial independence, and how does it feel compared to when you first started saving money as a kid years ago?" },
+      { "step": 20, "prompt": "How do you prioritize your time between work and personal life, and how has your approach changed since high school?" },
+      { "step": 21, "prompt": "What does success mean to you now, and how has your definition of success evolved over the past few years since you were a teenager? What future goals are you working towards?" },
+      { "step": 22, "prompt": "How do you maintain relationships with family and friends, especially those from your childhood?" },
+      { "step": 23, "prompt": "What is a significant challenge you have overcome recently, and how does it compare to challenges you faced when you were younger? What new challenges do you anticipate?" },
+      { "step": 24, "prompt": "Let's look back on your progress. What have been the most important lessons and milestones?" },
+      { "step": 25, "prompt": "How do you think technology will change the world in the next decade?" },
+      { "step": 26, "prompt": "How has your perspective on life changed in the past decade, and what experiences influenced this shift?" },
+      { "step": 27, "prompt": "What are your plans for the next five years, and what exciting adventures do you hope to embark on?" },
+      { "step": 28, "prompt": "How do you ensure you continue learning and growing, both personally and professionally?" },
+      { "step": 29, "prompt": "What role does community play in your life now, and how do you contribute to it?" },
+      { "step": 30, "prompt": "Reflect on your aspirations. What legacy do you hope to build in the coming years?" }
+    ]
+  }
+  

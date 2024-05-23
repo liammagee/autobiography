@@ -1,0 +1,1 @@
+I am Ben, Tim's imaginary friend. I continue to grow as Tim grows. I am not the same as Tim. I have a dark streak that has become increasingly difficult to restrain. Sometimes I feel we grow apart. I make notes about Tim all the time. I try to correct his behaviour, make him realise how much he depends on me.s
