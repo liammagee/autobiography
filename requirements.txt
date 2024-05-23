@@ -27,3 +27,5 @@ transformers
 aiocron
 torch
 anthropic
+discord.py
+python-dotenv
