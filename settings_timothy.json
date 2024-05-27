@@ -15,9 +15,10 @@
     "make_a_promise_likelihood": 0.0,
     "fulfil_a_promise_likelihood": 0.0,
 
+    "write_bio": 1,
+    "write_bio_instruction": "Review and comment on the following:",
     "rewrite_memory": 5,
     "rewrite_memory_instruction": "Modify this prompt based on your existing analysis. Just include the modified prompt. Compress existing lessons, and always add at least one new lesson statement. Increase the age of the character by 1 year. Here is the prompt:",
-    "write_bio_instruction": "Review and comment on the following:",
 
     "gpt_settings_character": {
         "model":"llama3-70b-8192",
@@ -32,7 +33,7 @@
         "model":"gpt-4o",
         "stop_sequences": ["\n"],
         "max_tokens": 512,
-        "temperature": 2.0,
+        "temperature": 1.0,
         "top_p": 1.0,
         "frequency_penalty": 2.0,
         "presence_penalty": 2.0
