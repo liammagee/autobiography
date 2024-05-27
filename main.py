@@ -210,8 +210,8 @@ async def revise_memory():
 
     reply = await update_instructions()
 
-    if reply != None:
-        await send_colored_embed(channel_last, "Instruction Set", reply, [], discord.Color.red())
+    # if reply != None:
+    #     await send_colored_embed(channel_last, "Instruction Set", reply, [], discord.Color.red())
 
     return reply
 
@@ -422,7 +422,7 @@ async def on_message(message):
 
             reply = await revise_memory()
             if reply != None:
-                await send_colored_embed(channel, "Memory Revision", reply, [], discord.Color.green())
+                await send_colored_embed(channel, "Memory Revision", reply, [], discord.Color.red())
                 # chunks = split_into_chunks(reply, max_length=1600)
                 # await send_chunks(message, chunks)
 
@@ -498,7 +498,7 @@ async def periodic_task():
 
                 reply = await revise_memory()
                 if reply != None:
-                    await send_colored_embed(channel_last, "Memory Revision", reply, [], discord.Color.green())
+                    await send_colored_embed(channel_last, "Memory Revision", reply, [], discord.Color.red())
                     # chunks = split_into_chunks(reply, max_length=1600)
                     # for chunk in chunks:
                     #     await channel_last.send(chunk)
