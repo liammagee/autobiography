@@ -4,7 +4,7 @@
     "discord_token_env_var": "DISCORD_BOTOKEN_TIMOTHY",
     "prompt_for_character": "drama/timothy_curious.md",
     "prompt_for_narrator": "drama/ben_kind.md",
-    "director_script": "drama/script_situational.json",
+    "director_script": "drama/script_intro.json",
     "events": "drama/events.md",
     "channels": ["timothy"],
     "channel_ids": [1239371274090709053],
@@ -21,10 +21,10 @@
     "write_bio_instruction": "Review and comment on the following:",
 
     "gpt_settings": {
-        "model":"llama3-70b-8192",
+        "model":"gpt-4o",
         "stop_sequences": ["\n"],
         "max_tokens": 512,
-        "temperature": 2.0,
+        "temperature": 1.0,
         "top_p": 1.0,
         "frequency_penalty": 2.0,
         "presence_penalty": 2.0
