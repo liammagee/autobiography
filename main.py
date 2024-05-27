@@ -43,6 +43,7 @@ all_models = [
     "claude-3",
 ]
 
+subject = 'Nosubject'
 parameters = {}
 
 client_character = None
@@ -336,6 +337,12 @@ async def clear_chat(interaction: discord.Interaction, limit: int = 0):
     await interaction.response.send_message(f"{limit} responses cleared from chat.")
 
 
+@tree.command(name = "reload_settings", description = "Reload settings", guild=discord.Object(guild_id)) 
+async def clear_chat(interaction: discord.Interaction, limit: int = 0):
+    reload_settings()
+    await interaction.response.send_message(f"Settings reloaded.")
+
+
 def build_history():
     # GPT limit, minus max response token size
     token_limit = 16097 - parameters["gpt_settings_character"]["max_tokens"]
@@ -559,27 +566,23 @@ def get_prompt(prompts, step):
 
 
 
-def main():
-    global client_character, client_narrator, params_gpt_character, params_gpt_narrator
+def reload_settings():
+    global client_character, client_narrator
     global parameters
     global bot_name
     global guild_id, channel_ids
     global sleep_counter, make_a_promise_likelihood, fulfil_a_promise_likelihood
     global director_prompts
+    global subject
 
     # Load the settings file
     try:
-        subject = f'settings_{sys.argv[2]}.json'
-        with open(subject, "r") as read_file:
+        subject_settings_file = f'settings_{subject}.json'
+        with open(subject_settings_file, "r") as read_file:
             parameters = json.loads(read_file.read())
     except Exception as e:
         print(f"Error loading settings file: {e}")
         return
-    
-    # Load the Discord token from the environment variable
-    discord_token_env_var = parameters['discord_token_env_var']
-    discord_token = os.environ.get(discord_token_env_var)
-
 
     bot_name = parameters['name']
     channel_ids = parameters['channel_ids']
@@ -633,6 +636,18 @@ def main():
     else:
         # client_narrator = Groq(api_key=os.getenv('GROQ_API_KEY'))    
         client_narrator = AsyncGroq(api_key=os.getenv('GROQ_API_KEY'))    
+
+
+def main():
+    global subject
+
+    subject = sys.argv[2]
+
+    reload_settings()
+    
+    # Load the Discord token from the environment variable
+    discord_token_env_var = parameters['discord_token_env_var']
+    discord_token = os.environ.get(discord_token_env_var)
     
     client.run(discord_token)
 
