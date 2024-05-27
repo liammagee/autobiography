@@ -47,6 +47,7 @@ client_bot = None
 
 # Define a dictionary to hold the parameters and their default values
 params_gpt = {
+    "model" : "llama3-70b-8192",
     "temperature" : 0.7,
     "top_p" : 1.0,
     "frequency_penalty" : 0.0,
@@ -56,6 +57,19 @@ params_gpt = {
     "prompt_for_character" : "",
     "channel_reset" : ""
 }
+
+params_gpt_narrative = {
+    "model" : "gpt-4o",
+    "temperature" : 0.7,
+    "top_p" : 1.0,
+    "frequency_penalty" : 0.0,
+    "presence_penalty" : 0.0,
+    "summary_level" : 20,
+    "max_size_dialog" : 60,
+    "prompt_for_character" : "",
+    "channel_reset" : ""
+}
+
 bot_name=""
 stop_sequences = ["\n", "."]
 channel_ids = []
@@ -105,12 +119,13 @@ async def send_chunks(message, chunks):
         await message.reply(chunk)
 
 
-async def generate_reply(client_bot, model, params_gpt, system_prompt, messages):
+async def generate_reply(client_bot, parameters, model, system_prompt, messages):
+    model = parameters["model"]
     if model.startswith("claude-3"):
         message = client_bot.messages.create(
             model=model,
-            max_tokens=params_gpt["max_tokens"],
-            temperature=params_gpt["temperature"],
+            max_tokens=parameters["max_tokens"],
+            temperature=parameters["temperature"],
             system=system_prompt,
             messages=messages
         )
@@ -120,8 +135,8 @@ async def generate_reply(client_bot, model, params_gpt, system_prompt, messages)
         response = await client_bot.chat.completions.create(
             model=model,
             messages=messages,
-            max_tokens=params_gpt["max_tokens"],
-            temperature=params_gpt["temperature"],
+            max_tokens=parameters["max_tokens"],
+            temperature=parameters["temperature"],
         )
         if response != 0:
             reply = response.choices[0].message.content
@@ -129,9 +144,9 @@ async def generate_reply(client_bot, model, params_gpt, system_prompt, messages)
     return reply
 
 
-async def chat_prompt(prompt, model='gpt-4', stopSequences=[]):
+async def chat_prompt(prompt, parameters, model='gpt-4', stopSequences=[]):
     try:
-        prompt_for_character = params_gpt["prompt_for_character"]
+        prompt_for_character = parameters["prompt_for_character"]
         prompt_for_character = eval(f'f"""{prompt_for_character}"""')
 
         messages = []
@@ -143,7 +158,7 @@ async def chat_prompt(prompt, model='gpt-4', stopSequences=[]):
         # for m in messages:
         #     print(f"{m['role']}: {m['content']}")
 
-        return await generate_reply(client_bot, model, params_gpt, prompt_for_character, messages)
+        return await generate_reply(client_bot, parameters, model, prompt_for_character, messages)
     except Exception as e:
         print(f"Error: {e}")
         return {"role": "system", "content": "Looks like ChatGPT is down!"}
@@ -161,7 +176,7 @@ async def big_brother_summary():
         history = build_history()
         write_bio_instruction = params_gpt["write_bio_instruction"] 
         messages.append({'role': 'user', 'content': f"{write_bio_instruction}: '{history}'."})
-        reply = await generate_reply(client_bot, params_gpt["model"], params_gpt, prompt_for_narrator, messages)
+        reply = await generate_reply(client_bot, params_gpt, params_gpt["model"], prompt_for_narrator, messages)
         del messages[0]
         messages.append({'role': 'assistant', 'content': reply})
 
@@ -171,18 +186,18 @@ async def big_brother_summary():
         #     if message['role'] == 'assistant':
         #         content = message['content']
         #         messages.append({'role': 'user', 'content': f"Review and revise the following: '{content}'. Include nothing but the revised statement."})
-        #         reply = await generate_reply(client_bot, params_gpt["model"], params_gpt, prompt_for_narrator, messages)
+        #         reply = await generate_reply(client_bot, params_gpt, params_gpt["model"], prompt_for_narrator, messages)
         #         # Remove first system message
         #         del messages[0]
         #         messages.append({'role': 'assistant', 'content': reply})
         #         message['content'] = reply
         
         # print(bot_running_dialog[-1:]['content'])
-        # reply = await generate_reply(client_bot, params_gpt["model"], params_gpt, prompt_for_narrator, messages)
+        # reply = await generate_reply(client_bot, params_gpt, params_gpt["model"], prompt_for_narrator, messages)
         # messages.append({"role": "assistant", "content": reply})
         # messages.append({"role": "user", "content": f"Analyse this text: ."})
 
-        # reply2 = await generate_reply(client_bot, params_gpt["model"], params_gpt, prompt_for_narrator, messages)
+        # reply2 = await generate_reply(client_bot, params_gpt, params_gpt["model"], prompt_for_narrator, messages)
         # prompt_for_narrator = reply2
         # params_gpt["prompt_for_narrator"] = reply2
 
@@ -190,7 +205,7 @@ async def big_brother_summary():
         messages.append({"role": "user", "content": f"{rewrite_memory_instruction}: {prompt_for_character}"})
 
         # print(messages)
-        new_character_prompt = await generate_reply(client_bot, params_gpt["model"], params_gpt, prompt_for_narrator, messages)
+        new_character_prompt = await generate_reply(client_bot, params_gpt_narrative, params_gpt_narrative["model"], prompt_for_narrator, messages)
         old_character_prompt = params_gpt["prompt_for_character"]
         params_gpt["prompt_for_character"] = new_character_prompt
 
@@ -211,7 +226,7 @@ async def revise_memory():
     if bracket_counter % params_gpt["rewrite_memory"] != 0:
         return None
 
-    reply = await summarise_autobiography(params_gpt["model"])
+    reply = await summarise_autobiography()
     await big_brother_summary()
 
     return reply
@@ -219,7 +234,7 @@ async def revise_memory():
 
 
 
-async def summarise_autobiography(model="gpt-4", num_results=1, stopSequences=["You:", "Zhang:"], topKReturn=2):
+async def summarise_autobiography(num_results=1, stopSequences=["You:", "Zhang:"], topKReturn=2):
     try:
         prompt_for_character = params_gpt["prompt_for_character"]
         prompt_for_character = eval(f'f"""{prompt_for_character}"""')
@@ -236,7 +251,9 @@ async def summarise_autobiography(model="gpt-4", num_results=1, stopSequences=["
 
         prompt = "Convert this into an biographical summary of the character's life to date: \n\n\"" + builder + "\". Express the narrative in the past tense. \n\n"
         messages.append({"role": "user", "content": prompt})
-        return await generate_reply(client_bot, model, params_gpt, prompt_for_narrator, messages)
+
+        model = params_gpt_narrative["model"]
+        return await generate_reply(client_bot, params_gpt_narrative, model, prompt_for_narrator, messages)
 
     except Exception as e:
         print(f"Error summarising autobiography: {e}, with {prompt}")
@@ -592,7 +609,9 @@ def main():
     params_gpt["rewrite_memory_instruction"] = subject_json['rewrite_memory_instruction']
     params_gpt["write_bio_instruction"] = subject_json['write_bio_instruction']
 
-    gpt_settings = subject_json['gpt_settings']
+    gpt_settings = subject_json['gpt_settings_charater']
+    params_gpt["character"] = subject_json['gpt_settings_character']
+    params_gpt["narrator"] = subject_json['gpt_settings_narrator']
     params_gpt["model"] = gpt_settings['model']
     params_gpt["temperature"] = gpt_settings['temperature']
     params_gpt["max_tokens"] = gpt_settings['max_tokens']
@@ -614,7 +633,7 @@ def main():
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: python3 autobiography.py --subject <name-of-subject>")
+        print("Usage: python3 main.py --subject <name-of-subject>")
         sys.exit(1)
 
     main()

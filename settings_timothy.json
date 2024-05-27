@@ -6,8 +6,7 @@
     "prompt_for_narrator": "drama/ben_kind.md",
     "director_script": "drama/script_situational.json",
     "events": "drama/events.md",
-    "channels": ["timothy"],
-    "channel_ids": [1239371274090709053],
+    "channel_ids": [1244445094942343218, 1239371274090709053],
     "summarise_level": 0,
     "max_size_dialog": 40000,
     "image_generation": "False",
@@ -20,7 +19,7 @@
     "rewrite_memory_instruction": "Modify this prompt based on your existing analysis. Just include the modified prompt. Compress existing lessons, and always add at least one new lesson statement. Increase the age of the character by 1 year. Here is the prompt:",
     "write_bio_instruction": "Review and comment on the following:",
 
-    "gpt_settings": {
+    "gpt_settings_character": {
         "model":"llama3-70b-8192",
         "stop_sequences": ["\n"],
         "max_tokens": 512,
@@ -28,5 +27,15 @@
         "top_p": 1.0,
         "frequency_penalty": 2.0,
         "presence_penalty": 2.0
+    },
+    "gpt_settings_narrator": {
+        "model":"gpt-4o",
+        "stop_sequences": ["\n"],
+        "max_tokens": 512,
+        "temperature": 2.0,
+        "top_p": 1.0,
+        "frequency_penalty": 2.0,
+        "presence_penalty": 2.0
     }
+
 }
