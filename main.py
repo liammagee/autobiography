@@ -338,9 +338,21 @@ async def clear_chat(interaction: discord.Interaction, limit: int = 0):
 
 
 @tree.command(name = "reload_settings", description = "Reload settings", guild=discord.Object(guild_id)) 
-async def clear_chat(interaction: discord.Interaction, limit: int = 0):
+async def clear_chat(interaction: discord.Interaction):
     reload_settings()
     await interaction.response.send_message(f"Settings reloaded.")
+
+
+@tree.command(name = "biography", description = "Generates a biography", guild=discord.Object(guild_id)) 
+async def biography(interaction: discord.Interaction):
+    reply = await summarise_autobiography()
+    await send_colored_embed(channel_last, "Autobiography", reply, [], discord.Color.green())
+
+
+@tree.command(name = "dump_conversation", description = "Dumps the conversation", guild=discord.Object(guild_id)) 
+async def dump_conversation(interaction: discord.Interaction):
+    reply = await dump_autobiography()
+    await send_colored_embed(channel_last, "Dump Conversation", reply, [], discord.Color.green())
 
 
 def build_history():
@@ -380,6 +392,7 @@ async def send_colored_embed(channel, title, description, fields, color=discord.
     
     # Send the embed
     await channel.send(embed=embed)
+
 
 @client.event
 async def on_message(message):
@@ -427,21 +440,14 @@ async def on_message(message):
         reply = "[NO-GPT RESPONSE]"
         try:
 
-            reply = await revise_memory()
-            if reply != None:
-                await send_colored_embed(channel, "Memory Revision", reply, [], discord.Color.red())
-                # chunks = split_into_chunks(reply, max_length=1600)
-                # await send_chunks(message, chunks)
-
             if prompt.startswith("SUMMARISE"):
                 reply = await summarise_autobiography()
             elif prompt.startswith("DUMP"):
                 reply = await dump_autobiography()
-            elif prompt.startswith("BEN"):
-                reply = await dump_autobiography()
             else:
                 prompt = f"Frame #{bracket_counter}. User is {author_name}. User says: {prompt}"
                 reply = await chat_prompt(prompt, parameters)
+
         except Exception as e:
             print(e)
             reply = 'So sorry, dear User! ChatGPT is down.'
@@ -460,6 +466,20 @@ async def on_message(message):
 
         else:
             await message.channel.send("Sorry, couldn't reply")
+
+        reply_bio = await write_bio()
+        if reply_bio != None:
+            await send_colored_embed(channel_last, "Autobiography", reply_bio, [], discord.Color.green())
+            # chunks = split_into_chunks(reply, max_length=1600)
+            # for chunk in chunks:
+            #     await channel_last.send(chunk)
+
+        reply_revision = await revise_memory()
+        if reply_revision != None:
+            await send_colored_embed(channel_last, "Memory Revision", reply_revision, [], discord.Color.red())
+            # chunks = split_into_chunks(reply, max_length=1600)
+            # for chunk in chunks:
+            #     await channel_last.send(chunk)
 
 
 async def periodic_task():
@@ -496,20 +516,6 @@ async def periodic_task():
 
             if prompt is not None:
 
-                reply = await write_bio()
-                if reply != None:
-                    await send_colored_embed(channel_last, "Autobiography", reply, [], discord.Color.green())
-                    # chunks = split_into_chunks(reply, max_length=1600)
-                    # for chunk in chunks:
-                    #     await channel_last.send(chunk)
-
-                reply = await revise_memory()
-                if reply != None:
-                    await send_colored_embed(channel_last, "Memory Revision", reply, [], discord.Color.red())
-                    # chunks = split_into_chunks(reply, max_length=1600)
-                    # for chunk in chunks:
-                    #     await channel_last.send(chunk)
-
                 prompt =  f"Step {bracket_counter}: {prompt}"
                 
                 # if make_a_promise:
@@ -529,7 +535,7 @@ async def periodic_task():
                 except Exception as e:
                     print(e)
                     result = 'So sorry, dear User! ChatGPT is down.'
-                
+
                 if result != "":
                     if len(bot_running_dialog) >= max_size_dialog:
                         bot_running_dialog.pop(0)
@@ -540,6 +546,22 @@ async def periodic_task():
                     if make_a_promise:
                         promises.append(result)
                 await channel_last.send(result)
+
+
+                reply = await write_bio()
+                if reply != None:
+                    await send_colored_embed(channel_last, "Autobiography", reply, [], discord.Color.green())
+                    # chunks = split_into_chunks(reply, max_length=1600)
+                    # for chunk in chunks:
+                    #     await channel_last.send(chunk)
+
+                reply = await revise_memory()
+                if reply != None:
+                    await send_colored_embed(channel_last, "Memory Revision", reply, [], discord.Color.red())
+                    # chunks = split_into_chunks(reply, max_length=1600)
+                    # for chunk in chunks:
+                    #     await channel_last.send(chunk)
+
         else:
             print("No channel_last_id")
 
