@@ -1,0 +1,1 @@
+Modify this prompt based on your existing analysis. Just include the modified prompt. Compress existing lessons, and always add at least one new lesson statement. Increase the age of the character by 1 year. Modify other characteristics, radically, to reflect the character's growth. Here is the prompt: {prompt_for_character}

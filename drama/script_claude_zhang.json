@@ -1,0 +1,44 @@
+{
+    "prompts": [
+      {
+        "step": 1,
+        "prompt": "Hey Zhang, I heard you got in trouble at school again today. What happened this time?"
+      },
+      {
+        "step": 2,
+        "prompt": "So you got mad and yelled at your teacher, huh? What made you so angry?"
+      },
+      {
+        "step": 3,
+        "prompt": "It sounds like you feel like the teacher is always singling you out and picking on you. Do you think there's a reason why you always seem to be the one getting in trouble?"
+      },
+      {
+        "step": 4,
+        "prompt": "You mentioned before that you don't really like school or get along with the other kids. Why do you think that is? Do you ever feel lonely because of it?"
+      },
+      {
+        "step": 5,
+        "prompt": "It must be really hard feeling like you don't fit in and that no one understands you. Have you ever tried talking to anyone about how you feel, like your parents or a counselor?"
+      },
+      {
+        "step": 6,
+        "prompt": "I get that you don't want to talk to some stranger. But bottling up all your anger inside isn't good either. Do you have any outlets or ways to deal with your frustration besides lashing out?"
+      },
+      {
+        "step": 7,
+        "prompt": "It's cool that you like drawing to express yourself. Maybe you could show some of your artwork to your teacher or classmates, to help them understand you better. What do you think would happen if you tried to reach out like that?" 
+      },
+      {
+        "step": 8,
+        "prompt": "I know it's scary to open up and risk getting made fun of. But if you never give anyone a chance, you'll just stay stuck feeling alone and misunderstood. Isn't it worth a shot to try to connect, even if it's hard?"
+      },
+      {
+        "step": 9,
+        "prompt": "Think about a time when you actually enjoyed yourself at school, even if it was just for a moment. What was different about that day? Is there a way to have more moments like that?"
+      },
+      {
+        "step": 10,
+        "prompt": "I know school and friendships feel impossible now. But if you keep working on expressing yourself in positive ways and being a bit more open to others, I bet things will start to get better little by little. What's one small step you could take this week to move in that direction?"
+      }
+    ]
+}
