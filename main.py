@@ -315,13 +315,13 @@ async def summarise_autobiography():
 
 async def dump_autobiography():
     global parameters
-    
+
     try:
 
         history = build_history()
 
         prompt_for_character = parameters["prompt_for_character"]
-        builder = 'system: '
+        builder = f'system: {prompt_for_character}\n\n'
         for message in history:
             role = message['role']
             content = message['content']
