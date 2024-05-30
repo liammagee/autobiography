@@ -1,0 +1,44 @@
+{
+    "prompts": [
+      {
+        "step": 1,
+        "prompt": "Hey there! How's your day going? I heard you had an important presentation at work this morning. How did it go?"
+      },
+      {
+        "step": 2,
+        "prompt": "That's great to hear that your presentation went well despite the technical difficulties with the projector. So, what's next on your agenda for today?"
+      },
+      {
+        "step": 3,
+        "prompt": "Ah, you have a deadline to meet for a client project. That sounds challenging, especially since you mentioned that one of your team members called in sick. How do you plan to tackle this hurdle?"
+      },
+      {
+        "step": 4,
+        "prompt": "Delegating tasks and prioritizing the critical aspects of the project is a smart approach. I know you had planned to leave work early today to attend your child's school play. Will you still be able to make it?"
+      },
+      {
+        "step": 5,
+        "prompt": "It's disappointing that you might miss the play due to the project deadline. How do you plan to handle this situation with your family?"
+      },
+      {
+        "step": 6,
+        "prompt": "That's a thoughtful solution to video call your family during the play so that you can still be a part of the experience. It's not ideal, but it shows your commitment to both your work and your family. How do you feel about the way you managed these challenges today?"
+      },
+      {
+        "step": 7,
+        "prompt": "It's great to hear that you feel you handled the day's hurdles to the best of your abilities. Looking back, what would you say was the most significant obstacle you faced today, and what did you learn from it?"
+      },
+      {
+        "step": 8,
+        "prompt": "Learning to adapt and find creative solutions when faced with unexpected challenges is a valuable skill. Speaking of the future, I remember you mentioned a big project pitch coming up next week. How are you preparing for it?"
+      },
+      {
+        "step": 9,
+        "prompt": "It sounds like you have a solid plan in place for the project pitch. Considering the experiences you had today, is there anything you'd like to do differently to prepare for potential hurdles?"
+      },
+      {
+        "step": 10,
+        "prompt": "That's a great idea to have a backup plan and to communicate openly with your team and clients about any potential challenges. It seems like you've learned a lot from today's experiences. As we wrap up, what would you say is the most important takeaway from today that you'll carry with you moving forward?"
+      }
+    ]
+  }

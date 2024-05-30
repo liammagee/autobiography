@@ -32,10 +32,8 @@ tree = app_commands.CommandTree(client)
 guild_id = int(os.getenv("DISCORD_GUILD_ID"))
 channel_last = None
 
-
 # Load a pre-trained tokenizer (for example, the GPT-2 tokenizer)
 tokenizer = AutoTokenizer.from_pretrained('gpt2')
-
 
 all_models = [
     "gpt-4",
@@ -43,24 +41,29 @@ all_models = [
     "claude-3",
 ]
 
-subject = 'Nosubject'
 parameters = {}
+
+# Drama
+subject = 'Nosubject'
+bot_name = ""
 
 client_character = None
 client_narrator = None
 
-bot_name=""
+dialog_character = []
+dialog_narrator = []
+
+director_prompts = {}
+
 stop_sequences = ["\n", "."]
 channel_ids = []
 
-max_size_dialog = 10000
-bot_running_dialog = []
+max_size_dialog = 40000
 user_refs = []
 prompt_suffix = """{0}: {1}
 {2}:"""
 
-director_prompts = {}
-
+# Time tracking
 initial_time = datetime.now()
 formatted_time = None
 
@@ -70,7 +73,6 @@ fulfil_a_promise_likelihood = 0.5
 promises = []
 
 bracket_counter = 1
-
 
 
 def split_into_chunks(text, max_length=2000):
@@ -101,16 +103,18 @@ async def send_chunks(message, chunks):
 async def generate_reply(params, client, system_prompt, messages):
     model = params["model"]
     if model.startswith("claude-3"):
-        message = client.messages.create(
-            model=model,
-            max_tokens=params["max_tokens"],
-            temperature=params["temperature"],
-            system=system_prompt,
-            messages=messages
-        )
+        if messages[0]["role"] == "system":
+            system_prompt = messages[0]["content"]
+            messages[0].delete(0)
+        message = client.messages.create(model=model,
+                                         max_tokens=params["max_tokens"],
+                                         temperature=params["temperature"],
+                                         system=system_prompt,
+                                         messages=messages)
         reply = message.content[0].text
     else:
-        messages.insert(0, {"role": "system", "content": system_prompt})
+        if messages[0]["role"] != "system":
+            messages.insert(0, {"role": "system", "content": system_prompt})
         response = await client.chat.completions.create(
             model=model,
             messages=messages,
@@ -123,34 +127,74 @@ async def generate_reply(params, client, system_prompt, messages):
     return reply
 
 
+async def chat_prompt_internal(prompt, parameters, messages):
+    try:
+        prompt_for_narrator = parameters["prompt_for_narrator"]
+        prompt_for_narrator = eval(f'f"""{prompt_for_narrator}"""')
+
+        messages = []
+        messages.append({"role": "user", "content": prompt})
+
+        return await generate_reply(parameters["gpt_settings_narrator"],
+                                    client_narrator, prompt_for_narrator,
+                                    messages)
+    except Exception as e:
+        print(f"Error in chat prompt: {e}")
+        return {"role": "system", "content": "Looks like ChatGPT is down!"}
+
+
 async def chat_prompt(prompt, parameters):
     try:
         prompt_for_character = parameters["prompt_for_character"]
         prompt_for_character = eval(f'f"""{prompt_for_character}"""')
 
-        messages = []
         history = build_history()
+        messages = []
         for item in history:
             messages.append(item)
+
+        # internal_messages = []
+        # for item in history:
+        #     internal_messages.append(item)
+        # internal_messages.append({"role": "user", "content": f"About me: {prompt_for_character}"})
+        # internal_prompt = f"Given what you know about me, what should I say in reply to this '{prompt}'?"
+        # internal_reply = await chat_prompt_internal(internal_prompt, parameters, messages)
+        # inserted_prompt = f"When you are asked this '{prompt}'?"
+        # messages.append({"role": "user", "content": inserted_prompt})
+        # messages.append({"role": "assistant", "content": internal_reply})
+
         messages.append({"role": "user", "content": prompt})
 
-        return await generate_reply(parameters["gpt_settings_character"], client_character, prompt_for_character, messages)
+        reply = await generate_reply(parameters["gpt_settings_character"],
+                                     client_character, prompt_for_character,
+                                     messages)
+
+        # print("*****")
+        # counter = 1
+        # for message in messages:
+        #     print(str(counter)+": "+message["content"][0:50])
+        #     counter = counter + 1
+        # print(str(counter)+": "+reply[0:50])
+
+        return reply
     except Exception as e:
         print(f"Error in chat prompt: {e}")
         return {"role": "system", "content": "Looks like ChatGPT is down!"}
 
-async def write_bio():
-    global bot_running_dialog, parameters
 
-    if bracket_counter % parameters["write_bio"] != 0:
+async def write_bio():
+    global dialog_character, parameters
+
+    if bracket_counter % parameters["write_bio_schedule"] != 0:
         return None
-    
+
     autobiography = await summarise_autobiography()
 
     return autobiography
 
-async def update_instructions():
-    global bot_running_dialog, parameters
+
+async def update_character_instructions():
+    global dialog_character, parameters
 
     try:
         prompt_for_character = parameters["prompt_for_character"]
@@ -159,7 +203,7 @@ async def update_instructions():
         messages = []
 
         # history = build_history()
-        # write_bio_instruction = parameters["write_bio_instruction"] 
+        # write_bio_instruction = parameters["write_bio_instruction"]
         # messages.append({'role': 'user', 'content': f"{write_bio_instruction}: '{history}'."})
         # reply = await generate_reply(parameters["gpt_settings_narrator"], client_narrator, prompt_for_narrator, messages)
         # del messages[0]
@@ -168,7 +212,7 @@ async def update_instructions():
         # Rewrite history
         # messages_to_rewrite = int(parameters["rewrite_memory"]) * 2
         # messages = []
-        # for message in bot_running_dialog[-messages_to_rewrite:]:
+        # for message in dialog_character[-messages_to_rewrite:]:
         #     if message['role'] == 'assistant':
         #         content = message['content']
         #         messages.append({'role': 'user', 'content': f"Review and revise the following: '{content}'. Include nothing but the revised statement."})
@@ -177,8 +221,8 @@ async def update_instructions():
         #         del messages[0]
         #         messages.append({'role': 'assistant', 'content': reply})
         #         message['content'] = reply
-        
-        # print(bot_running_dialog[-1:]['content'])
+
+        # print(dialog_character[-1:]['content'])
         # reply = await generate_reply(client_character, parameters, parameters["model"], prompt_for_narrator, messages)
         # messages.append({"role": "assistant", "content": reply})
         # messages.append({"role": "user", "content": f"Analyse this text: ."})
@@ -187,29 +231,54 @@ async def update_instructions():
         # prompt_for_narrator = reply2
         # parameters["prompt_for_narrator"] = reply2
 
-        rewrite_memory_instruction = parameters["rewrite_memory_instruction"]
-        messages.append({"role": "user", "content": f"{rewrite_memory_instruction}: {prompt_for_character}"})
+        # rewrite_memory_instruction = parameters["rewrite_memory_instruction"]
 
-        # print(messages)
-        new_character_prompt = await generate_reply(parameters["gpt_settings_narrator"], client_narrator, prompt_for_narrator, messages)
+        history = build_history()
+        dialog_history = ''
+        for message in history:
+            dialog_history += message['content'] + "\n"
+
+        prompt_for_narrator_rewrite_memory = parameters[
+            "prompt_for_narrator_rewrite_memory"]
+        rewrite_memory_instruction = eval(
+            f'f"""{prompt_for_narrator_rewrite_memory}"""')
+        messages.append({
+            "role":
+            "user",
+            "content":
+            f"{rewrite_memory_instruction}: {prompt_for_character}"
+        })
+
+        new_character_prompt = await generate_reply(
+            parameters["gpt_settings_narrator"], client_narrator,
+            prompt_for_narrator, messages)
         old_character_prompt = parameters["prompt_for_character"]
         parameters["prompt_for_character"] = new_character_prompt
 
         prompt_update = f"Previous Instruction:\n {old_character_prompt}\n\nRevised Instruction:\n {new_character_prompt}"
 
+        dialog_narrator.append({
+            "role":
+            "user",
+            "content":
+            f"{rewrite_memory_instruction}: {prompt_for_character}"
+        })
+        dialog_narrator.append({"role": "assistant", "content": prompt_update})
+
         return prompt_update
 
     except Exception as e:
         print(e)
-        return "Couldn't update isntructions!"
+        return f"Couldn't update intructions! {e}"
+
 
 async def revise_memory():
     global bracket_counter, parameters
 
-    if bracket_counter % parameters["rewrite_memory"] != 0:
+    if bracket_counter % parameters["rewrite_memory_schedule"] != 0:
         return None
 
-    reply = await update_instructions()
+    reply = await update_character_instructions()
 
     # if reply != None:
     #     await send_colored_embed(channel_last, "Instruction Set", reply, [], discord.Color.red())
@@ -217,33 +286,32 @@ async def revise_memory():
     return reply
 
 
-
-
 async def summarise_autobiography():
-    prompt = ''
+    write_bio_instruction = ''
     try:
-        prompt_for_character = parameters["prompt_for_character"]
-        prompt_for_character = eval(f'f"""{prompt_for_character}"""')
-
         prompt_for_narrator = parameters["prompt_for_narrator"]
         prompt_for_narrator = eval(f'f"""{prompt_for_narrator}"""')
 
         messages = []
-        
+
         history = build_history()
-        builder = ''
+        dialog_history = ''
         for message in history:
-            builder += message['content'] + "\n"
+            dialog_history += message['content'] + "\n"
 
-        prompt = f"Convert this into an biographical summary of the character's life to date: \n\n\"{builder}\". Express the narrative in the past tense. \n\n"
-        messages.append({"role": "user", "content": prompt})
+        prompt_for_narrator_bio = parameters["prompt_for_narrator_bio"]
+        write_bio_instruction = eval(f'f"""{prompt_for_narrator_bio}"""')
+        messages.append({"role": "user", "content": write_bio_instruction})
 
-        return await generate_reply(parameters["gpt_settings_narrator"], client_narrator, prompt_for_narrator, messages)
+        return await generate_reply(parameters["gpt_settings_narrator"],
+                                    client_narrator, prompt_for_narrator,
+                                    messages)
 
     except Exception as e:
-        print(f"Error summarising autobiography: {e}, with {prompt}")
+        print(
+            f"Error summarising biography: {e}, with {write_bio_instruction}")
         return "Error!"
-    
+
 
 async def dump_autobiography():
     try:
@@ -254,26 +322,29 @@ async def dump_autobiography():
         for message in history:
             role = message['role']
             content = message['content']
-            builder += f"{role}: {content}\n\n" 
+            builder += f"{role}: {content}\n\n"
 
         return builder
     except Exception as e:
         return "No history"
 
+
 @client.event
 async def on_ready():
     await tree.sync(guild=discord.Object(guild_id))
     client.loop.create_task(periodic_task())
-    print(f'We have logged in as {client.user} to {len(client.guilds)} guilds.')
+    print(
+        f'We have logged in as {client.user} to {len(client.guilds)} guilds.')
 
-    
 
-@tree.command(name = "get", description = "Show parameters", guild=discord.Object(guild_id)) #Add the guild ids in which the slash command will appear. If it should be in all, remove the argument, but note that it will take some time (up to an hour) to register the command if it's for all guilds.
+@tree.command(
+    name="get", description="Show parameters", guild=discord.Object(guild_id)
+)  #Add the guild ids in which the slash command will appear. If it should be in all, remove the argument, but note that it will take some time (up to an hour) to register the command if it's for all guilds.
 async def get_params(interaction: discord.Interaction):
     response = "Current parameters:\n"
     for key, value in parameters.items():
         response += f"{key}: {value}\n"
-    response += f"bot_running_dialog size: {len(bot_running_dialog)}\n"
+    response += f"dialog_character size: {len(dialog_character)}\n"
     response += f"stop_sequences: {stop_sequences}\n"
     history = build_history()
     response += f"history: {history}\n"
@@ -288,7 +359,9 @@ async def get_params(interaction: discord.Interaction):
         await interaction.followup.send(chunk)
 
 
-@tree.command(name = "set", description = "Set parameters", guild=discord.Object(guild_id)) #Add the guild ids in which the slash command will appear. If it should be in all, remove the argument, but note that it will take some time (up to an hour) to register the command if it's for all guilds.
+@tree.command(
+    name="set", description="Set parameters", guild=discord.Object(guild_id)
+)  #Add the guild ids in which the slash command will appear. If it should be in all, remove the argument, but note that it will take some time (up to an hour) to register the command if it's for all guilds.
 async def set_params(interaction,
                      prompt_for_character: str = None,
                      model_id: int = None,
@@ -299,7 +372,7 @@ async def set_params(interaction,
                      summary_level: int = None,
                      max_size_dialog: int = None,
                      channel_reset: str = None):
-    global bot_running_dialog
+    global dialog_character
     if prompt_for_character is not None:
         parameters["prompt_for_character"] = prompt_for_character
     if model_id is not None:
@@ -317,42 +390,58 @@ async def set_params(interaction,
     if summary_level is not None:
         parameters["summary_level"] = summary_level
     if max_size_dialog is not None:
-        bot_running_dialog = bot_running_dialog[:max_size_dialog]
+        dialog_character = dialog_character[:max_size_dialog]
         parameters["max_size_dialog"] = max_size_dialog
     if channel_reset is not None:
         parameters["channel_reset"] = channel_reset
     await interaction.response.send_message("Parameters updated.")
 
 
-@tree.command(name = "reset", description = "Reset memory", guild=discord.Object(guild_id)) #Add the guild ids in which the slash command will appear. If it should be in all, remove the argument, but note that it will take some time (up to an hour) to register the command if it's for all guilds.
+@tree.command(
+    name="reset", description="Reset memory", guild=discord.Object(guild_id)
+)  #Add the guild ids in which the slash command will appear. If it should be in all, remove the argument, but note that it will take some time (up to an hour) to register the command if it's for all guilds.
 async def reset(interaction: discord.Interaction):
-    bot_running_dialog.clear()
-    await interaction.response.send_message("Summary and history have been reset!")
+    dialog_character.clear()
+    await interaction.response.send_message(
+        "Summary and history have been reset!")
 
 
-@tree.command(name = "clear_chat", description = "Clear Chat history", guild=discord.Object(guild_id)) #Add the guild ids in which the slash command will appear. If it should be in all, remove the argument, but note that it will take some time (up to an hour) to register the command if it's for all guilds.
+@tree.command(
+    name="clear_chat",
+    description="Clear Chat history",
+    guild=discord.Object(guild_id)
+)  #Add the guild ids in which the slash command will appear. If it should be in all, remove the argument, but note that it will take some time (up to an hour) to register the command if it's for all guilds.
 async def clear_chat(interaction: discord.Interaction, limit: int = 0):
     channel = client.get_channel(interaction.channel_id)
     await channel.purge(limit=limit)
-    await interaction.response.send_message(f"{limit} responses cleared from chat.")
+    await interaction.response.send_message(
+        f"{limit} responses cleared from chat.")
 
 
-@tree.command(name = "reload_settings", description = "Reload settings", guild=discord.Object(guild_id)) 
+@tree.command(name="reload_settings",
+              description="Reload settings",
+              guild=discord.Object(guild_id))
 async def clear_chat(interaction: discord.Interaction):
     reload_settings()
     await interaction.response.send_message(f"Settings reloaded.")
 
 
-@tree.command(name = "biography", description = "Generates a biography", guild=discord.Object(guild_id)) 
+@tree.command(name="biography",
+              description="Generates a biography",
+              guild=discord.Object(guild_id))
 async def biography(interaction: discord.Interaction):
     reply = await summarise_autobiography()
-    await send_colored_embed(channel_last, "Autobiography", reply, [], discord.Color.green())
+    await send_colored_embed(channel_last, "Autobiography", reply, [],
+                             discord.Color.green())
 
 
-@tree.command(name = "dump_conversation", description = "Dumps the conversation", guild=discord.Object(guild_id)) 
+@tree.command(name="dump_conversation",
+              description="Dumps the conversation",
+              guild=discord.Object(guild_id))
 async def dump_conversation(interaction: discord.Interaction):
     reply = await dump_autobiography()
-    await send_colored_embed(channel_last, "Dump Conversation", reply, [], discord.Color.green())
+    await send_colored_embed(channel_last, "Dump Conversation", reply, [],
+                             discord.Color.green())
 
 
 def build_history():
@@ -361,10 +450,10 @@ def build_history():
 
     # Tokenize the string to get the number of tokens
     tokens_len = 0
-    
+
     # Iterate through the list in reverse order
     bot_running_dialog_limited = []
-    for item in reversed(bot_running_dialog):
+    for item in reversed(dialog_character):
         tokens_item = tokenizer(str(item) + "\n", return_tensors='pt')
         tokens_item_len = tokens_item.input_ids.size(1)
         if tokens_len + tokens_item_len < token_limit:
@@ -376,27 +465,29 @@ def build_history():
     return bot_running_dialog_limited
 
 
-
 # Method to create and send a colored embed
-async def send_colored_embed(channel, title, description, fields, color=discord.Color.blue()):
+async def send_colored_embed(channel,
+                             title,
+                             description,
+                             fields,
+                             color=discord.Color.blue()):
+    # Truncate the description if it's too long
+    description = description[:4096]
+
     # Create an embed object
-    embed = discord.Embed(
-        title=title,
-        description=description,
-        color=color
-    )
-    
+    embed = discord.Embed(title=title, description=description, color=color)
+
     # Add fields to the embed
     for name, value, inline in fields:
         embed.add_field(name=name, value=value, inline=inline)
-    
+
     # Send the embed
     await channel.send(embed=embed)
 
 
 @client.event
 async def on_message(message):
-    global bot_running_dialog
+    global dialog_character
     global prompt_for_character
     global user_refs
     global channel_last
@@ -407,9 +498,11 @@ async def on_message(message):
 
     if message.author == client.user:
         return
-    
+
     if message.channel.id not in channel_ids:
-        print(f"Channel {message.channel.id} not found in these channel_ids: {channel_ids}")
+        print(
+            f"Channel {message.channel.id} not found in these channel_ids: {channel_ids}"
+        )
         return
 
     data = message.content
@@ -451,13 +544,13 @@ async def on_message(message):
         except Exception as e:
             print(e)
             reply = 'So sorry, dear User! ChatGPT is down.'
-        
+
         if reply != "":
-            if len(bot_running_dialog) >= max_size_dialog:
-                bot_running_dialog.pop(0)
-                bot_running_dialog.pop(0)
-            bot_running_dialog.append({"role": "user", "content": prompt})
-            bot_running_dialog.append({"role": "assistant", "content": reply})
+            if len(dialog_character) >= max_size_dialog:
+                dialog_character.pop(0)
+                dialog_character.pop(0)
+            dialog_character.append({"role": "user", "content": prompt})
+            dialog_character.append({"role": "assistant", "content": reply})
 
             bracket_counter = bracket_counter + 1
 
@@ -469,32 +562,35 @@ async def on_message(message):
 
         reply_bio = await write_bio()
         if reply_bio != None:
-            await send_colored_embed(channel_last, "Autobiography", reply_bio, [], discord.Color.green())
+            await send_colored_embed(channel_last, "Autobiography", reply_bio,
+                                     [], discord.Color.green())
             # chunks = split_into_chunks(reply, max_length=1600)
             # for chunk in chunks:
             #     await channel_last.send(chunk)
 
         reply_revision = await revise_memory()
         if reply_revision != None:
-            await send_colored_embed(channel_last, "Memory Revision", reply_revision, [], discord.Color.red())
+            await send_colored_embed(channel_last, "Memory Revision",
+                                     reply_revision, [], discord.Color.red())
             # chunks = split_into_chunks(reply, max_length=1600)
             # for chunk in chunks:
             #     await channel_last.send(chunk)
 
 
 async def periodic_task():
-    global bot_running_dialog
+    global dialog_character
     global channel_last, bracket_counter, director_prompts
     global sleep_counter, formatted_time
-    global make_a_promise_likelihood,  fulfil_a_promise_likelihood
-    
+    global make_a_promise_likelihood, fulfil_a_promise_likelihood
+
     channel_last_id = int(channel_ids[0])
-    channel_last = (client.get_channel(channel_last_id) or await client.fetch_channel(channel_last_id))
+    channel_last = (client.get_channel(channel_last_id)
+                    or await client.fetch_channel(channel_last_id))
 
     while True:
         # Get the current time
         now = datetime.now()
-        
+
         elapsed_time = now - initial_time
 
         # Convert the difference into seconds
@@ -516,8 +612,8 @@ async def periodic_task():
 
             if prompt is not None:
 
-                prompt =  f"Step {bracket_counter}: {prompt}"
-                
+                prompt = f"Step {bracket_counter}: {prompt}"
+
                 # if make_a_promise:
                 #     prompt = "Make promise: Generate a very brief note-to-self that will remind you to reflect on events to date at a future point in time."
                 # elif fulfil_a_promise and len(promises) > 0:
@@ -537,27 +633,34 @@ async def periodic_task():
                     result = 'So sorry, dear User! ChatGPT is down.'
 
                 if result != "":
-                    if len(bot_running_dialog) >= max_size_dialog:
-                        bot_running_dialog.pop(0)
-                        bot_running_dialog.pop(0)
-                    bot_running_dialog.append({"role": "user", "content": prompt})
-                    bot_running_dialog.append({"role": "assistant", "content": result})
+                    if len(dialog_character) >= max_size_dialog:
+                        dialog_character.pop(0)
+                        dialog_character.pop(0)
+                    dialog_character.append({
+                        "role": "user",
+                        "content": prompt
+                    })
+                    dialog_character.append({
+                        "role": "assistant",
+                        "content": result
+                    })
                     bracket_counter = bracket_counter + 1
                     if make_a_promise:
                         promises.append(result)
                 await channel_last.send(result)
 
-
                 reply = await write_bio()
                 if reply != None:
-                    await send_colored_embed(channel_last, "Autobiography", reply, [], discord.Color.green())
+                    await send_colored_embed(channel_last, "Autobiography",
+                                             reply, [], discord.Color.green())
                     # chunks = split_into_chunks(reply, max_length=1600)
                     # for chunk in chunks:
                     #     await channel_last.send(chunk)
 
                 reply = await revise_memory()
                 if reply != None:
-                    await send_colored_embed(channel_last, "Memory Revision", reply, [], discord.Color.red())
+                    await send_colored_embed(channel_last, "Memory Revision",
+                                             reply, [], discord.Color.red())
                     # chunks = split_into_chunks(reply, max_length=1600)
                     # for chunk in chunks:
                     #     await channel_last.send(chunk)
@@ -579,13 +682,13 @@ def load_prompts(file_path):
     with open(file_path, 'r') as f:
         return json.load(f)['prompts']
 
+
 # Function to get the prompt for the current step
 def get_prompt(prompts, step):
     for prompt in prompts:
         if prompt['step'] == step:
             return prompt['prompt']
     return None
-
 
 
 def reload_settings():
@@ -611,53 +714,49 @@ def reload_settings():
 
     try:
         sleep_counter = int(parameters['sleep_counter'])
-        make_a_promise_likelihood = float(parameters['make_a_promise_likelihood'])
-        fulfil_a_promise_likelihood = float(parameters['fulfil_a_promise_likelihood'])
+        make_a_promise_likelihood = float(
+            parameters['make_a_promise_likelihood'])
+        fulfil_a_promise_likelihood = float(
+            parameters['fulfil_a_promise_likelihood'])
     except Exception as e:
         print(e)
         pass
 
-    parameters["prompt_for_character"] = load_markdown_content(parameters['prompt_for_character'])
-    parameters["prompt_for_narrator"] = load_markdown_content(parameters['prompt_for_narrator'])
-    
+    parameters["prompt_for_character"] = load_markdown_content(
+        parameters['prompt_for_character'])
+    parameters["prompt_for_narrator"] = load_markdown_content(
+        parameters['prompt_for_narrator'])
+
+    parameters["prompt_for_narrator_bio"] = load_markdown_content(
+        parameters['prompt_for_narrator_bio'])
+    parameters["prompt_for_narrator_rewrite_memory"] = load_markdown_content(
+        parameters['prompt_for_narrator_rewrite_memory'])
+
     # Load prompts from the JSON file
     director_prompts = load_prompts(parameters['director_script'])
 
-    # params_gpt["summarise_level"] = parameters['summarise_level']
-    # params_gpt["max_size_dialog"] = parameters['max_size_dialog']
-    # params_gpt["rewrite_memory"] = parameters['rewrite_memory']
-    # params_gpt["rewrite_memory_instruction"] = parameters['rewrite_memory_instruction']
-    # params_gpt["write_bio"] = parameters['write_bio']
-    # params_gpt["write_bio_instruction"] = parameters['write_bio_instruction']
-
-    # params_gpt["character"] = parameters['gpt_settings_character']
-    # params_gpt["narrator"] = parameters['gpt_settings_narrator']
-    # params_gpt["model"] = gpt_settings['model']
-    # params_gpt["temperature"] = gpt_settings['temperature']
-    # params_gpt["max_tokens"] = gpt_settings['max_tokens']
-    # params_gpt["top_p"] = gpt_settings['top_p']
-    # params_gpt["frequency_penalty"] = gpt_settings['frequency_penalty']
-    # params_gpt["presence_penalty"] = gpt_settings['presence_penalty']
-    
     model_client = parameters["gpt_settings_character"]["model"]
-    if model_client == 'claude-3':
-        client_character = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+    if 'claude-3' in model_client:
+        client_character = anthropic.Anthropic(
+            api_key=os.getenv('ANTHROPIC_API_KEY'))
     elif 'gpt' in model_client:
         # client_character = OpenAI(api_key = os.environ.get("OPENAI_API_KEY"))
-        client_character = AsyncOpenAI(api_key = os.environ.get("OPENAI_API_KEY"))
+        client_character = AsyncOpenAI(
+            api_key=os.environ.get("OPENAI_API_KEY"))
     else:
-        # client_character = Groq(api_key=os.getenv('GROQ_API_KEY'))    
-        client_character = AsyncGroq(api_key=os.getenv('GROQ_API_KEY'))    
-    
+        # client_character = Groq(api_key=os.getenv('GROQ_API_KEY'))
+        client_character = AsyncGroq(api_key=os.getenv('GROQ_API_KEY'))
+
     model_narrative = parameters["gpt_settings_narrator"]["model"]
-    if model_narrative == 'claude-3':
-        client_narrator = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+    if 'claude-3' in model_narrative:
+        client_narrator = anthropic.Anthropic(
+            api_key=os.getenv('ANTHROPIC_API_KEY'))
     elif 'gpt' in model_narrative:
         # client_narrator = OpenAI(api_key = os.environ.get("OPENAI_API_KEY"))
-        client_narrator = AsyncOpenAI(api_key = os.environ.get("OPENAI_API_KEY"))
+        client_narrator = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
     else:
-        # client_narrator = Groq(api_key=os.getenv('GROQ_API_KEY'))    
-        client_narrator = AsyncGroq(api_key=os.getenv('GROQ_API_KEY'))    
+        # client_narrator = Groq(api_key=os.getenv('GROQ_API_KEY'))
+        client_narrator = AsyncGroq(api_key=os.getenv('GROQ_API_KEY'))
 
 
 def main():
@@ -666,11 +765,11 @@ def main():
     subject = sys.argv[2]
 
     reload_settings()
-    
+
     # Load the Discord token from the environment variable
     discord_token_env_var = parameters['discord_token_env_var']
     discord_token = os.environ.get(discord_token_env_var)
-    
+
     client.run(discord_token)
 
 
@@ -680,4 +779,3 @@ if __name__ == "__main__":
         sys.exit(1)
 
     main()
-    

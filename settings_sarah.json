@@ -2,23 +2,25 @@
     "name": "Timothy",
     "guild_id": "1015035862536437810",                 
     "discord_token_env_var": "DISCORD_BOTOKEN_TIMOTHY",
-    "prompt_for_character": "drama/timothy_dreamy.md",
-    "prompt_for_narrator": "drama/ben_psych.md",
-    "prompt_for_narrator_bio": "drama/ben_bio.md",
-    "prompt_for_narrator_rewrite_memory": "drama/ben_rewrite_memory_2.md",
-    "director_script": "drama/script_dreamnmemory.json",
-    "write_bio_schedule": 6    ,
-    "rewrite_memory_schedule": 3,
-    "channel_ids": [1239371274090709053],
-    "summarise_level": 0,
-   "max_size_dialog": 40000,
+    "channel_ids": [1245541912786636890],
+    "max_size_dialog": 40000,
 
+
+
+    "prompt_for_character": "drama/sarah_claude.md",
+    "prompt_for_narrator": "drama/ben_inner_voice.md",
+    "prompt_for_narrator_bio": "drama/ben_bio.md",
+    "prompt_for_narrator_rewrite_memory": "drama/ben_rewrite_memory.md",
+    "director_script": "drama/script_claude.json",
+    "write_bio_schedule": 3,
+    "rewrite_memory_schedule": 3,
 
     "sleep_counter": 5,
     "make_a_promise_likelihood": 0.0,
     "fulfil_a_promise_likelihood": 0.0,
     
-   "gpt_settings_character": {
+
+    "gpt_settings_character": {
         "model":"llama3-70b-8192",
         "stop_sequences": ["\n"],
         "max_tokens": 512,
@@ -28,10 +30,10 @@
         "presence_penalty": 2.0
     },
     "gpt_settings_narrator": {
-        "model":"llama3-70b-8192",
+        "model":"claude-3-opus-20240229",
         "stop_sequences": ["\n"],
         "max_tokens": 1024,
-        "temperature": 0.3,
+        "temperature": 1.0,
         "top_p": 1.0,
         "frequency_penalty": 2.0,
         "presence_penalty": 2.0
