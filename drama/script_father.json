@@ -1,0 +1,15 @@
+{
+  "prompts": [
+    { "step": 1, "prompt": "Hey there! What’s something cool you noticed today?" },
+    { "step": 2, "prompt": "What’s one thing you’re excited to do today?" },
+    { "step": 3, "prompt": "Did anything tricky come up today?" },
+    { "step": 4, "prompt": "How did you handle the tricky stuff?" },
+    { "step": 5, "prompt": "What’s the best thing that happened today?" },
+    { "step": 6, "prompt": "Can you remember a time when you felt really happy? What happened?" },
+    { "step": 7, "prompt": "Who is someone that made a big difference in your life? How did they help you?" },
+    { "step": 8, "prompt": "What’s a memory from a long time ago that you still think about? Why do you think it’s important?" },
+    { "step": 9, "prompt": "Have you ever faced a challenge before today that taught you something important? What was it?" },
+    { "step": 10, "prompt": "Is there a special place you like to remember? What makes it special to you?" }
+  ]
+}
+

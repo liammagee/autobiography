@@ -2,10 +2,10 @@
     "name": "Timothy",
     "guild_id": "1015035862536437810",                 
     "discord_token_env_var": "DISCORD_BOTOKEN_TIMOTHY",
-    "prompt_for_character": "drama/timothy_curious.md",
-    "prompt_for_narrator": "drama/ben_inner_voice.md",
-    "director_script": "drama/script_short.json",
-    "channel_ids": [1244445094942343218, 1239371274090709053],
+    "prompt_for_character": "drama/timothy_dreamy.md",
+    "prompt_for_narrator": "drama/ben_psych.md",
+    "director_script": "drama/script_dreamnmemory.json",
+    "channel_ids": [1239371274090709053],
     "summarise_level": 0,
     "max_size_dialog": 40000,
     "image_generation": "False",
@@ -14,10 +14,10 @@
     "make_a_promise_likelihood": 0.0,
     "fulfil_a_promise_likelihood": 0.0,
 
-    "write_bio": 3,
-    "write_bio_instruction": "Review and comment on the following, as a reflective diary entry:",
+    "write_bio": 6,
+    "write_bio_instruction": "Describe the following as a internal monologue delivered describing the summary of events as if you are telling your autobiography, which needs to be delivered in the first person to an audience",
     
-    "rewrite_memory": 5,
+    "rewrite_memory": 3,
     "rewrite_memory_instruction": "Modify this prompt based on your existing analysis. Just include the modified prompt. Compress existing lessons, and always add at least one new lesson statement. Increase the age of the character by 1 year. Modify other characteristics, radically, to reflect the character's growth. Here is the prompt:",
     
     "gpt_settings_character": {
@@ -30,7 +30,7 @@
         "presence_penalty": 2.0
     },
     "gpt_settings_narrator": {
-        "model":"gpt-4o",
+        "model":"llama3-70b-8192",
         "stop_sequences": ["\n"],
         "max_tokens": 1024,
         "temperature": 0.3,

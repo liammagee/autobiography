@@ -1,0 +1,20 @@
+{
+  "files": {
+    "drama/ben_inner_voice (copy).md": [
+      {
+        "id": "5e8fca34-017f-4003-bd49-48d2bd0b273d",
+        "line": 1,
+        "version": 1,
+        "index": 0
+      }
+    ],
+    "drama/script_situational.json": [
+      {
+        "id": "908eaebe-4e66-45bc-8c6f-69b246ca040c",
+        "line": 4,
+        "version": 1,
+        "index": 186
+      }
+    ]
+  }
+}

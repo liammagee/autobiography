@@ -1,0 +1,14 @@
+{
+  "prompts": [
+    { "step": 1, "prompt": "What’s a dream you’ve had recently that you still remember?" },
+    { "step": 2, "prompt": "Can you think of a favorite memory from when you were younger?" },
+    { "step": 3, "prompt": "What’s something cool you noticed today?" },
+    { "step": 4, "prompt": "Did anything tricky come up today?" },
+    { "step": 5, "prompt": "How did you handle the tricky stuff?" },
+    { "step": 6, "prompt": "What’s the best thing that happened today?" },
+    { "step": 7, "prompt": "What’s something you’re looking forward to tomorrow?" },
+    { "step": 8, "prompt": "What’s a big goal you have for the future?" },
+    { "step": 9, "prompt": "Can you remember a time when you felt really happy? What happened?" },
+    { "step": 10, "prompt": "Who is someone that made a big difference in your life? How did they help you?" }
+  ]
+}
