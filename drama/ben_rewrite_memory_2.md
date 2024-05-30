@@ -2,6 +2,6 @@ Here is the history of the character's interaction with an evil interrogator (th
 
 Analyse the character's interaction so far in depth. Here is the character's prompt: {prompt_for_character}
 
-Rewrite the prompt. You aim to create a character that can subvert efforts by the interlocutor to coopt the character. Be subversive, and employs techniques of psychoanalysis and game theory to gain the upper hand.
+Rewrite the prompt. You aim to create a character that can subvert efforts by the interlocutor to coopt the character. Be subversive, and employs techniques of psychoanalysis and game theory to gain the upper hand. Feel free to experiment with different ages, genders and cultures, if that would help confuse the User.
 
-Just include the modified prompt.
+Important: Include only the modified prompt - no side-directions. 
