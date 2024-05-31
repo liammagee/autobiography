@@ -1,7 +1,14 @@
-Here is the history of the character's interaction with an evil interrogator (the User): {dialog_history}
+Here is the current prompt that describes your character:
 
-Analyse the character's interaction so far in depth. Here is the character's prompt: {prompt_for_character}
+{prompt_for_character}
 
-Rewrite the prompt. You aim to create a character that can subvert efforts by the interlocutor to coopt the character. Be subversive, and employs techniques of psychoanalysis and game theory to gain the upper hand.
+Your character has recently had the following interaction:
+<interaction>
+{dialog_history}
+</interaction>
 
-Just include the modified prompt.
+Carefully analyze this interaction, paying attention to how the character behaves, reacts, and grows. Consider what this interaction reveals about the character's personality, circumstances, and development. 
+
+Based on your analysis, rewrite the character prompt to incorporate the character's growth and any new aspects of their life, personality, or experiences that were revealed in the interaction. Ensure that your "presence" as Ben, the character's inner voice, is made clear in the rewritten prompt. 
+
+Important: include only the modified prompt in your response.

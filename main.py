@@ -49,9 +49,13 @@ bot_name = ""
 
 client_character = None
 client_narrator = None
+client_audience = None
+client_director = None
 
 dialog_character = []
 dialog_narrator = []
+dialog_audience = []
+dialog_director = []
 
 director_prompts = {}
 
@@ -129,7 +133,7 @@ async def generate_reply(params, client, system_prompt, messages):
 
 async def chat_prompt_internal(prompt, parameters, messages):
     try:
-        prompt_for_narrator = parameters["prompt_for_narrator"]
+        prompt_for_narrator = parameters["narrator"]["prompt"]
         prompt_for_narrator = eval(f'f"""{prompt_for_narrator}"""')
 
         messages = []
@@ -145,7 +149,7 @@ async def chat_prompt_internal(prompt, parameters, messages):
 
 async def chat_prompt(prompt, parameters):
     try:
-        prompt_for_character = parameters["prompt_for_character"]
+        prompt_for_character = parameters["character"]["prompt"]
         prompt_for_character = eval(f'f"""{prompt_for_character}"""')
 
         history = build_history()
@@ -165,7 +169,7 @@ async def chat_prompt(prompt, parameters):
 
         messages.append({"role": "user", "content": prompt})
 
-        reply = await generate_reply(parameters["gpt_settings_character"],
+        reply = await generate_reply(parameters["character"]["llm_settings"],
                                      client_character, prompt_for_character,
                                      messages)
 
@@ -197,8 +201,9 @@ async def update_character_instructions():
     global dialog_character, parameters
 
     try:
-        prompt_for_character = parameters["prompt_for_character"]
-        prompt_for_narrator = parameters["prompt_for_narrator"]
+        prompt_for_character = parameters["character"]["prompt"]
+        prompt_for_narrator = parameters["narrator"]["prompt"]
+        
 
         messages = []
 
@@ -233,13 +238,9 @@ async def update_character_instructions():
 
         # rewrite_memory_instruction = parameters["rewrite_memory_instruction"]
 
-        history = build_history()
-        dialog_history = ''
-        for message in history:
-            dialog_history += message['content'] + "\n"
+        dialog_history = print_history()
 
-        prompt_for_narrator_rewrite_memory = parameters[
-            "prompt_for_narrator_rewrite_memory"]
+        prompt_for_narrator_rewrite_memory = parameters["narrator"]["prompt_for_rewrite_memory"]
         rewrite_memory_instruction = eval(
             f'f"""{prompt_for_narrator_rewrite_memory}"""')
         messages.append({
@@ -250,10 +251,10 @@ async def update_character_instructions():
         })
 
         new_character_prompt = await generate_reply(
-            parameters["gpt_settings_narrator"], client_narrator,
+            parameters["narrator"]["llm_settings"], client_narrator,
             prompt_for_narrator, messages)
-        old_character_prompt = parameters["prompt_for_character"]
-        parameters["prompt_for_character"] = new_character_prompt
+        old_character_prompt = parameters["character"]["prompt"]
+        parameters["character"]["prompt"] = new_character_prompt
 
         prompt_update = f"Previous Instruction:\n {old_character_prompt}\n\nRevised Instruction:\n {new_character_prompt}"
 
@@ -289,21 +290,18 @@ async def revise_memory():
 async def summarise_autobiography():
     write_bio_instruction = ''
     try:
-        prompt_for_narrator = parameters["prompt_for_narrator"]
+        prompt_for_narrator = parameters["narrator"]["prompt"]
         prompt_for_narrator = eval(f'f"""{prompt_for_narrator}"""')
 
         messages = []
 
-        history = build_history()
-        dialog_history = ''
-        for message in history:
-            dialog_history += message['content'] + "\n"
+        dialog_history = build_history()
 
-        prompt_for_narrator_bio = parameters["prompt_for_narrator_bio"]
+        prompt_for_narrator_bio = parameters["narrator"]["prompt_for_bio"]
         write_bio_instruction = eval(f'f"""{prompt_for_narrator_bio}"""')
         messages.append({"role": "user", "content": write_bio_instruction})
 
-        return await generate_reply(parameters["gpt_settings_narrator"],
+        return await generate_reply(parameters["narrator"]["llm_settings"],
                                     client_narrator, prompt_for_narrator,
                                     messages)
 
@@ -320,7 +318,7 @@ async def dump_autobiography():
 
         history = build_history()
 
-        prompt_for_character = parameters["prompt_for_character"]
+        prompt_for_character = parameters["character"]["prompt"]
         builder = f'system: {prompt_for_character}\n\n'
         for message in history:
             role = message['role']
@@ -377,7 +375,7 @@ async def set_params(interaction,
                      channel_reset: str = None):
     global dialog_character
     if prompt_for_character is not None:
-        parameters["prompt_for_character"] = prompt_for_character
+        parameters["character"]["prompt"] = prompt_for_character
     if model_id is not None:
         model = all_models[model_id]
         parameters["model_id"] = str(model_id)
@@ -449,7 +447,7 @@ async def dump_conversation(interaction: discord.Interaction):
 
 def build_history():
     # GPT limit, minus max response token size
-    token_limit = 16097 - parameters["gpt_settings_character"]["max_tokens"]
+    token_limit = 16097 - parameters["character"]["llm_settings"]["max_tokens"]
 
     # Tokenize the string to get the number of tokens
     tokens_len = 0
@@ -466,6 +464,15 @@ def build_history():
             break
     # Construct the dialog history
     return bot_running_dialog_limited
+
+def print_history():
+    history = build_history()
+    dialog_history = ''
+    for message in history:
+        message_role = message['role']
+        message_content = message['content']
+        dialog_history += f"{message_role}: {message_content}\n"
+    return dialog_history
 
 
 # Method to create and send a colored embed
@@ -521,8 +528,8 @@ async def on_message(message):
     elif author.name not in user_refs:
         user_refs.append(author.name)
 
-    prompt_for_character = parameters["prompt_for_character"]
-    prompt_for_narrator = parameters["prompt_for_narrator"]
+    prompt_for_character = parameters["character"]["prompt"]
+    prompt_for_narrator = parameters["narrator"]["prompt"]
 
     if not BOT_ON:
         return
@@ -535,14 +542,8 @@ async def on_message(message):
         # For debugging
         reply = "[NO-GPT RESPONSE]"
         try:
-
-            if prompt.startswith("SUMMARISE"):
-                reply = await summarise_autobiography()
-            elif prompt.startswith("DUMP"):
-                reply = await dump_autobiography()
-            else:
-                prompt = f"Frame #{bracket_counter}. User is {author_name}. User says: {prompt}"
-                reply = await chat_prompt(prompt, parameters)
+            prompt = f"Frame #{bracket_counter}. User is {author_name}. User says: {prompt}"
+            reply = await chat_prompt(prompt, parameters)
 
         except Exception as e:
             print(e)
@@ -590,6 +591,9 @@ async def periodic_task():
     channel_last = (client.get_channel(channel_last_id)
                     or await client.fetch_channel(channel_last_id))
 
+    turn_limit = parameters["audience"]["turn_limit"]
+    write_bio_schedule = parameters["write_bio_schedule"]
+
     while True:
         # Get the current time
         now = datetime.now()
@@ -611,11 +615,13 @@ async def periodic_task():
             message = ''
 
             # Load prompts from the JSON file
-            prompt = get_prompt(director_prompts, bracket_counter)
+            prompt = get_director_prompt(director_prompts, bracket_counter)
 
+            if prompt is None and bracket_counter < write_bio_schedule:
+                prompt = await get_audience_prompt(bracket_counter)
+                
             if prompt is not None:
-
-                prompt = f"Step {bracket_counter}: {prompt}"
+                prompt = f"\n\n\n**Step {bracket_counter}**: {prompt}"
 
                 # if make_a_promise:
                 #     prompt = "Make promise: Generate a very brief note-to-self that will remind you to reflect on events to date at a future point in time."
@@ -682,20 +688,64 @@ def load_markdown_content(file_path):
 
 # Function to load JSON prompts from a file
 def load_prompts(file_path):
-    with open(file_path, 'r') as f:
-        return json.load(f)['prompts']
+    try:
+        with open(file_path, 'r') as f:
+            return json.load(f)['prompts']
+    except Exception as e:
+        print(f"Error loading prompts file: {e}")
+        return {}
 
 
 # Function to get the prompt for the current step
-def get_prompt(prompts, step):
+def get_director_prompt(prompts, step):
     for prompt in prompts:
         if prompt['step'] == step:
             return prompt['prompt']
     return None
 
+# Function to get the prompt for the current step
+async def get_audience_prompt(step):
+    try:
+        prompt_for_audience = parameters["audience"]["prompt"]
+
+        messages = []
+
+        dialog_history = print_history()
+
+        prompt_for_audience_message = parameters["audience"]["prompt_for_audience_message"]
+        prompt_for_audience_message = eval(
+            f'f"""{prompt_for_audience_message}"""')
+        
+        messages.append({
+            "role":
+            "user",
+            "content":
+            f"{prompt_for_audience_message}"
+        })
+
+        return await generate_reply(parameters["audience"]["llm_settings"],
+                                    client_audience, prompt_for_audience,
+                                    messages)
+    
+    except Exception as e:
+        return f"Error in generating audience message! {e}"
+
+def generate_client(model):
+    client = None
+    if 'claude-3' in model:
+        client = anthropic.Anthropic(
+            api_key=os.getenv('ANTHROPIC_API_KEY'))
+    elif 'gpt' in model:
+        # client_character = OpenAI(api_key = os.environ.get("OPENAI_API_KEY"))
+        client = AsyncOpenAI(
+            api_key=os.environ.get("OPENAI_API_KEY"))
+    else:
+        # client_character = Groq(api_key=os.getenv('GROQ_API_KEY'))
+        client = AsyncGroq(api_key=os.getenv('GROQ_API_KEY'))
+    return client
 
 def reload_settings():
-    global client_character, client_narrator
+    global client_character, client_narrator, client_audience, client_director
     global parameters
     global bot_name
     global guild_id, channel_ids
@@ -725,41 +775,27 @@ def reload_settings():
         print(e)
         pass
 
-    parameters["prompt_for_character"] = load_markdown_content(
-        parameters['prompt_for_character'])
-    parameters["prompt_for_narrator"] = load_markdown_content(
-        parameters['prompt_for_narrator'])
-
-    parameters["prompt_for_narrator_bio"] = load_markdown_content(
-        parameters['prompt_for_narrator_bio'])
-    parameters["prompt_for_narrator_rewrite_memory"] = load_markdown_content(
-        parameters['prompt_for_narrator_rewrite_memory'])
+    parameters["character"]["prompt"] = load_markdown_content(
+        parameters["character"]["prompt"])
+    parameters["narrator"]["prompt"] = load_markdown_content(
+        parameters["narrator"]["prompt"])
+    parameters["narrator"]["prompt_for_bio"] = load_markdown_content(
+        parameters["narrator"]['prompt_for_bio'])
+    parameters["narrator"]["prompt_for_rewrite_memory"] = load_markdown_content(
+        parameters["narrator"]['prompt_for_rewrite_memory'])
+    parameters["audience"]["prompt"] = load_markdown_content(
+        parameters["audience"]["prompt"])
+    parameters["audience"]["prompt_for_audience_message"] = load_markdown_content(
+        parameters["audience"]['prompt_for_audience_message'])
+    # parameters["director"]["prompt"] = load_markdown_content(parameters["director"]["prompt"])
 
     # Load prompts from the JSON file
-    director_prompts = load_prompts(parameters['director_script'])
+    director_prompts = load_prompts(parameters["director"]['director_script'])
 
-    model_client = parameters["gpt_settings_character"]["model"]
-    if 'claude-3' in model_client:
-        client_character = anthropic.Anthropic(
-            api_key=os.getenv('ANTHROPIC_API_KEY'))
-    elif 'gpt' in model_client:
-        # client_character = OpenAI(api_key = os.environ.get("OPENAI_API_KEY"))
-        client_character = AsyncOpenAI(
-            api_key=os.environ.get("OPENAI_API_KEY"))
-    else:
-        # client_character = Groq(api_key=os.getenv('GROQ_API_KEY'))
-        client_character = AsyncGroq(api_key=os.getenv('GROQ_API_KEY'))
-
-    model_narrative = parameters["gpt_settings_narrator"]["model"]
-    if 'claude-3' in model_narrative:
-        client_narrator = anthropic.Anthropic(
-            api_key=os.getenv('ANTHROPIC_API_KEY'))
-    elif 'gpt' in model_narrative:
-        # client_narrator = OpenAI(api_key = os.environ.get("OPENAI_API_KEY"))
-        client_narrator = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-    else:
-        # client_narrator = Groq(api_key=os.getenv('GROQ_API_KEY'))
-        client_narrator = AsyncGroq(api_key=os.getenv('GROQ_API_KEY'))
+    client_character = generate_client(parameters["character"]["llm_settings"]["model"])
+    client_narrator = generate_client(parameters["narrator"]["llm_settings"]["model"])
+    client_audience = generate_client(parameters["audience"]["llm_settings"]["model"])
+    client_director = generate_client(parameters["director"]["llm_settings"]["model"])
 
 
 def main():
