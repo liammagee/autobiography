@@ -2,12 +2,12 @@
 
     "guild_id": "1015035862536437810",                 
     "discord_token_env_var": "DISCORD_BOTOKEN_TIMOTHY",
-    "channel_ids": [1248126754443231323, 1244445094942343218, 1239371274090709053],
+    "channel_ids": [1239371274090709053, 1244445094942343218],
 
     "summarise_level": 0,
     "max_size_dialog": 40000,
 
-    "write_bio_schedule": 1,
+    "write_bio_schedule": 10,
     "rewrite_memory_schedule": 5,
 
     "sleep_counter": 2,
