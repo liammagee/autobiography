@@ -41,3 +41,4 @@ transformers==4.40.2
 typing_extensions==4.11.0
 urllib3==2.2.1
 yarl==1.9.4
+pydub

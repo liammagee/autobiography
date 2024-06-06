@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.ffmpeg-full
     pkgs.libxcrypt
     pkgs.pkg-config
     pkgs.openssl
