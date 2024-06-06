@@ -16,7 +16,7 @@
     
 
     "character": {
-        "prompt": "drama/timothy_mischief.md",
+        "prompt": "drama/timothy_child.md",
         "llm_settings": {
             "model":"llama3-70b-8192",
             "stop_sequences": ["\n"],
@@ -28,7 +28,7 @@
         }
     },
     "narrator": {
-        "prompt": "drama/ben_inner_voice.md",
+        "prompt": "drama/timothy_inner_voice.md",
         "prompt_for_bio": "drama/ben_bio.md",
         "prompt_for_rewrite_memory": "drama/ben_rewrite_memory_2.md",
         "llm_settings": {
@@ -42,7 +42,7 @@
         }
     },
     "audience": {
-        "prompt": "drama/sasha_interviewer.md",
+        "prompt": "drama/timothy_adult.md",
         "prompt_for_audience_message": "drama/sasha_interviewer_query.md",
         "turn_limit": 5,
         "llm_settings": {
