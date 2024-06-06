@@ -3,6 +3,9 @@ import os
 from dotenv import load_dotenv
 
 import requests
+from urllib.parse import urlparse
+import base64
+
 from openai import OpenAI, AsyncOpenAI
 import anthropic
 from groq import Groq, AsyncGroq
@@ -25,7 +28,7 @@ load_dotenv()
 
 intents = discord.Intents.default()
 intents.message_content = True
-client = discord.Client(intents=intents)
+client = discord.Client(command_prefix="!", intents=intents)
 # client = commands.Bot(command_prefix='!', intents=intents)
 tree = app_commands.CommandTree(client)
 
@@ -45,17 +48,16 @@ parameters = {}
 
 # Drama
 subject = 'Nosubject'
-bot_name = ""
 
 client_character = None
 client_narrator = None
 client_audience = None
 client_director = None
 
-dialog_character = []
-dialog_narrator = []
-dialog_audience = []
-dialog_director = []
+dialogue_history = []
+dialogue_narrator = []
+dialogue_audience = []
+dialogue_director = []
 
 director_prompts = {}
 
@@ -110,6 +112,9 @@ async def generate_reply(params, client, system_prompt, messages):
         if messages[0]["role"] == "system":
             system_prompt = messages[0]["content"]
             messages[0].delete(0)
+        for m in messages:
+            del m['name']
+
         message = client.messages.create(model=model,
                                          max_tokens=params["max_tokens"],
                                          temperature=params["temperature"],
@@ -131,15 +136,19 @@ async def generate_reply(params, client, system_prompt, messages):
     return reply
 
 
-async def chat_prompt_internal(prompt, parameters, messages):
+async def chat_prompt_internal(prompt, parameters, messages, image_path = None):
     try:
         prompt_for_narrator = parameters["narrator"]["prompt"]
         prompt_for_narrator = eval(f'f"""{prompt_for_narrator}"""')
+        narrator_name = parameters["narrator"]["name"]
 
+        content = [{"type": "text", "text": prompt}]
+
+            
         messages = []
-        messages.append({"role": "user", "content": prompt})
+        messages.append({"role": "user", "name": narrator_name, "content": content})
 
-        return await generate_reply(parameters["gpt_settings_narrator"],
+        return await generate_reply(parameters["narrator"]["llm_settings"],
                                     client_narrator, prompt_for_narrator,
                                     messages)
     except Exception as e:
@@ -147,10 +156,11 @@ async def chat_prompt_internal(prompt, parameters, messages):
         return {"role": "system", "content": "Looks like ChatGPT is down!"}
 
 
-async def chat_prompt(prompt, parameters):
+async def chat_prompt(prompt, parameters, image_path = None):
     try:
         prompt_for_character = parameters["character"]["prompt"]
         prompt_for_character = eval(f'f"""{prompt_for_character}"""')
+        audience_name = parameters["character"]["name"]
 
         history = build_history()
         messages = []
@@ -167,7 +177,15 @@ async def chat_prompt(prompt, parameters):
         # messages.append({"role": "user", "content": inserted_prompt})
         # messages.append({"role": "assistant", "content": internal_reply})
 
-        messages.append({"role": "user", "content": prompt})
+        content = [{"type": "text", "text": prompt}]
+        if image_path is not None:
+            # Getting the base64 string
+            base64_image = encode_image(image_path)
+            content.append({"type": "image_url", 
+                            "image_url": {
+                            "url": f"data:image/jpeg;base64,{base64_image}"
+            }})
+        messages.append({"role": "user", "name": audience_name, "content": content})
 
         reply = await generate_reply(parameters["character"]["llm_settings"],
                                      client_character, prompt_for_character,
@@ -187,18 +205,18 @@ async def chat_prompt(prompt, parameters):
 
 
 async def write_bio():
-    global dialog_character, parameters
+    global dialogue_history, parameters
 
     if bracket_counter % parameters["write_bio_schedule"] != 0:
         return None
 
-    autobiography = await summarise_autobiography()
+    autobiography = await generate_autobiography_from_dialogue()
 
     return autobiography
 
 
 async def update_character_instructions():
-    global dialog_character, parameters
+    global dialogue_history, parameters
 
     try:
         prompt_for_character = parameters["character"]["prompt"]
@@ -217,7 +235,7 @@ async def update_character_instructions():
         # Rewrite history
         # messages_to_rewrite = int(parameters["rewrite_memory"]) * 2
         # messages = []
-        # for message in dialog_character[-messages_to_rewrite:]:
+        # for message in dialogue_history[-messages_to_rewrite:]:
         #     if message['role'] == 'assistant':
         #         content = message['content']
         #         messages.append({'role': 'user', 'content': f"Review and revise the following: '{content}'. Include nothing but the revised statement."})
@@ -227,7 +245,7 @@ async def update_character_instructions():
         #         messages.append({'role': 'assistant', 'content': reply})
         #         message['content'] = reply
 
-        # print(dialog_character[-1:]['content'])
+        # print(dialogue_history[-1:]['content'])
         # reply = await generate_reply(client_character, parameters, parameters["model"], prompt_for_narrator, messages)
         # messages.append({"role": "assistant", "content": reply})
         # messages.append({"role": "user", "content": f"Analyse this text: ."})
@@ -258,13 +276,13 @@ async def update_character_instructions():
 
         prompt_update = f"Previous Instruction:\n {old_character_prompt}\n\nRevised Instruction:\n {new_character_prompt}"
 
-        dialog_narrator.append({
+        dialogue_narrator.append({
             "role":
             "user",
             "content":
             f"{rewrite_memory_instruction}: {prompt_for_character}"
         })
-        dialog_narrator.append({"role": "assistant", "content": prompt_update})
+        dialogue_narrator.append({"role": "assistant", "content": prompt_update})
 
         return prompt_update
 
@@ -287,7 +305,7 @@ async def revise_memory():
     return reply
 
 
-async def summarise_autobiography():
+async def generate_autobiography_from_dialogue():
     write_bio_instruction = ''
     try:
         prompt_for_narrator = parameters["narrator"]["prompt"]
@@ -301,9 +319,11 @@ async def summarise_autobiography():
         write_bio_instruction = eval(f'f"""{prompt_for_narrator_bio}"""')
         messages.append({"role": "user", "content": write_bio_instruction})
 
-        return await generate_reply(parameters["narrator"]["llm_settings"],
+        reply = await generate_reply(parameters["narrator"]["llm_settings"],
                                     client_narrator, prompt_for_narrator,
                                     messages)
+        
+        return reply
 
     except Exception as e:
         print(
@@ -311,7 +331,7 @@ async def summarise_autobiography():
         return "Error!"
 
 
-async def dump_autobiography():
+async def generate_script_from_dialogue():
     global parameters
 
     try:
@@ -319,15 +339,22 @@ async def dump_autobiography():
         history = build_history()
 
         prompt_for_character = parameters["character"]["prompt"]
+        name_for_character = parameters["character"]["name"]
         builder = f'system: {prompt_for_character}\n\n'
         for message in history:
             role = message['role']
+            username = role
+            if 'name' in message:
+                username = message['name']
+            elif role == 'assistant':
+                username = name_for_character
             content = message['content']
-            builder += f"{role}: {content}\n\n"
+            builder += f"{username}: {content}\n\n"
 
         return builder
     except Exception as e:
-        return "No history"
+        print(e)
+        return f"No history, due to {e}"
 
 
 @client.event
@@ -345,7 +372,7 @@ async def get_params(interaction: discord.Interaction):
     response = "Current parameters:\n"
     for key, value in parameters.items():
         response += f"{key}: {value}\n"
-    response += f"dialog_character size: {len(dialog_character)}\n"
+    response += f"dialogue_history size: {len(dialogue_history)}\n"
     response += f"stop_sequences: {stop_sequences}\n"
     history = build_history()
     response += f"history: {history}\n"
@@ -373,7 +400,7 @@ async def set_params(interaction,
                      summary_level: int = None,
                      max_size_dialog: int = None,
                      channel_reset: str = None):
-    global dialog_character
+    global dialogue_history
     if prompt_for_character is not None:
         parameters["character"]["prompt"] = prompt_for_character
     if model_id is not None:
@@ -391,7 +418,7 @@ async def set_params(interaction,
     if summary_level is not None:
         parameters["summary_level"] = summary_level
     if max_size_dialog is not None:
-        dialog_character = dialog_character[:max_size_dialog]
+        dialogue_history = dialogue_history[:max_size_dialog]
         parameters["max_size_dialog"] = max_size_dialog
     if channel_reset is not None:
         parameters["channel_reset"] = channel_reset
@@ -402,7 +429,7 @@ async def set_params(interaction,
     name="reset", description="Reset memory", guild=discord.Object(guild_id)
 )  #Add the guild ids in which the slash command will appear. If it should be in all, remove the argument, but note that it will take some time (up to an hour) to register the command if it's for all guilds.
 async def reset(interaction: discord.Interaction):
-    dialog_character.clear()
+    dialogue_history.clear()
     await interaction.response.send_message(
         "Summary and history have been reset!")
 
@@ -427,22 +454,112 @@ async def clear_chat(interaction: discord.Interaction):
     await interaction.response.send_message(f"Settings reloaded.")
 
 
-@tree.command(name="biography",
+@tree.command(name="generate_biography",
               description="Generates a biography",
               guild=discord.Object(guild_id))
-async def biography(interaction: discord.Interaction):
-    reply = await summarise_autobiography()
+async def generate_biography(interaction: discord.Interaction):
+    reply = await generate_autobiography_from_dialogue()
+    await interaction.response.send_message("Generating biography now...")
     await send_colored_embed(channel_last, "Autobiography", reply, [],
                              discord.Color.green())
 
 
-@tree.command(name="dump_conversation",
-              description="Dumps the conversation",
+# Write the Markdown content to a file
+def write_markdown_to_file(content, file_path):
+    with open(file_path, 'w', encoding='utf-8') as file:
+        file.write(content)
+    return open(file_path, 'r', encoding='utf-8')
+
+# Generate a file link (assuming the bot serves files from a known directory)
+def generate_file_link(file_path, base_url):
+    file_name = os.path.basename(file_path)
+    return f"{base_url}/{file_name}"
+
+# Generate a unique file name using timestamp
+def generate_unique_filename(base_path, extension='md'):
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    return os.path.join(base_path, f'dialogue_{timestamp}.{extension}')
+
+@tree.command(name="generate_script",
+              description="Generates the conversation as a script",
               guild=discord.Object(guild_id))
-async def dump_conversation(interaction: discord.Interaction):
-    reply = await dump_autobiography()
-    await send_colored_embed(channel_last, "Dump Conversation", reply, [],
+async def generate_script(interaction: discord.Interaction):
+    reply = await generate_script_from_dialogue()
+    
+    # await interaction.response.send_message("Generating script now...")
+
+    # Write content to file
+    file_link = generate_unique_filename('./')
+    file = write_markdown_to_file(reply, file_link)
+    file_name = os.path.basename(file_link)
+    await interaction.response.send_message(file=discord.File(file, file_name))
+    await send_colored_embed(channel_last, "The Dialogue so far...", reply, [],
                              discord.Color.green())
+
+
+# Function to encode the image
+def encode_image(image_path):
+  with open(image_path, "rb") as image_file:
+    return base64.b64encode(image_file.read()).decode('utf-8')
+  
+async def generate_image(prompt):
+    try:
+        audience_name = parameters["audience"]["name"]
+        llm_settings = parameters["audience"]["llm_settings"]
+        model = llm_settings["model"]
+
+        messages = []
+        messages.append({"role": "system", "content": "You are a creative assistant to an interpreter, and determine whether anything in the respondent's discourse is worth drawing."})
+        messages.append({
+            "role": "user",
+            "name": audience_name,
+            "content":f"If the following text contains an image to be drawn, create a prompt. Otherwise respond with an empty string.:\n\n{prompt}"
+        })
+        response = await client_audience.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=llm_settings["max_tokens"],
+            temperature=llm_settings["temperature"],
+        )
+        if response != 0:
+            reply = response.choices[0].message.content
+
+        # Check if reply is empty
+        if reply == "" or reply == '""':
+            return None
+        
+        response = await client_audience.images.generate(
+            model="dall-e-3",
+            prompt=reply,
+            size="1024x1024",
+            quality="standard",
+            n=1,
+        )
+        image_url = response.data[0].url
+
+        # Parse the URL to get the file name
+        parsed_url = urlparse(image_url)
+        file_name = os.path.basename(parsed_url.path)
+        
+        # Create the local path
+        local_path = os.path.join('./images/', file_name)
+        
+        response = requests.get(image_url)
+
+        # Check if the request was successful
+        if response.status_code == 200:
+            # Open the local file for writing in binary mode
+            with open(local_path, 'wb') as file:
+                file.write(response.content)
+            print(f"File saved to: {local_path}")
+        else:
+            print(f"Failed to retrieve the file. Status code: {response.status_code}")
+
+        return local_path
+    except Exception as e:
+        print(f"Error generating image: {e}")
+        return None
+
 
 
 def build_history():
@@ -453,17 +570,19 @@ def build_history():
     tokens_len = 0
 
     # Iterate through the list in reverse order
-    bot_running_dialog_limited = []
-    for item in reversed(dialog_character):
+    dialogue_history_limited = []
+    for item in reversed(dialogue_history):
         tokens_item = tokenizer(str(item) + "\n", return_tensors='pt')
         tokens_item_len = tokens_item.input_ids.size(1)
         if tokens_len + tokens_item_len < token_limit:
             tokens_len = tokens_len + tokens_item_len
-            bot_running_dialog_limited.insert(0, item)
+            dialogue_history_limited.insert(0, item)
         else:
             break
+
     # Construct the dialog history
-    return bot_running_dialog_limited
+    return dialogue_history_limited
+
 
 def print_history():
     history = build_history()
@@ -481,23 +600,70 @@ async def send_colored_embed(channel,
                              description,
                              fields,
                              color=discord.Color.blue()):
-    # Truncate the description if it's too long
-    description = description[:4096]
+    # Split the description into chunks of 4096 characters
+    chunk_size = 4096
+    # description_chunks = [description[i:i+chunk_size] for i in range(0, len(description), chunk_size)]
+    description_chunks = []
 
-    # Create an embed object
-    embed = discord.Embed(title=title, description=description, color=color)
+    if len(description) < chunk_size:
+        description_chunks.append(description)
+    else:
+        while len(description) > chunk_size:
+            # Find the last space within the chunk
+            last_space_index = description.rfind(' ', 0, chunk_size)
+            if last_space_index == -1:
+                # No space found, split at chunk_size
+                last_space_index = chunk_size
+            # Add the chunk to the list and remove it from the description
+            description_chunks.append(description[:last_space_index])
+            description = description[last_space_index:].lstrip()
+    
+    # Send each chunk as a separate embed
+    for i, chunk in enumerate(description_chunks):
+        # Create an embed object
+        embed = discord.Embed(title=title if i == 0 else f"{title} (cont.)", description=chunk, color=color)
+        
+        # Add fields only to the first embed
+        if i == 0:
+            for name, value, inline in fields:
+                embed.add_field(name=name, value=value, inline=inline)
 
-    # Add fields to the embed
-    for name, value, inline in fields:
-        embed.add_field(name=name, value=value, inline=inline)
+        # Send the embed
+        await channel.send(embed=embed)
+    # # Truncate the description if it's too long
+    # description = description[:4096]
 
-    # Send the embed
-    await channel.send(embed=embed)
+    # # Create an embed object
+    # embed = discord.Embed(title=title, description=description, color=color)
 
+    # # Add fields to the embed
+    # for name, value, inline in fields:
+    #     embed.add_field(name=name, value=value, inline=inline)
+
+    # # Send the embed
+    # await channel.send(embed=embed)
+
+async def download_image(url, filename):
+    # Send a GET request to the URL
+    response = requests.get(url)
+    save_path = None
+
+    # Check if the request was successful
+    if response.status_code == 200:
+        # Define the path where the image will be saved
+        save_path = os.path.join('./images/', filename)
+
+        # Write the image content to a file
+        with open(save_path, 'wb') as file:
+            file.write(response.content)
+        print(f"Image saved to: {save_path}")
+    else:
+        print(f"Failed to download image. Status code: {response.status_code}")
+    return save_path
 
 @client.event
 async def on_message(message):
-    global dialog_character
+    global dialogue_history
     global prompt_for_character
     global user_refs
     global channel_last
@@ -531,8 +697,14 @@ async def on_message(message):
     prompt_for_character = parameters["character"]["prompt"]
     prompt_for_narrator = parameters["narrator"]["prompt"]
 
-    if not BOT_ON:
-        return
+# Check if the message has attachments
+    image_path = None
+    if message.attachments:
+        for attachment in message.attachments:
+            # Check if the attachment is an image
+            if attachment.filename.lower().endswith(('png', 'jpg', 'jpeg', 'gif')):
+                # Download the image
+                image_path = await download_image(attachment.url, attachment.filename)
 
     # Simulate typing for 3 seconds
     async with channel.typing():
@@ -543,24 +715,42 @@ async def on_message(message):
         reply = "[NO-GPT RESPONSE]"
         try:
             prompt = f"Frame #{bracket_counter}. User is {author_name}. User says: {prompt}"
-            reply = await chat_prompt(prompt, parameters)
+            reply = await chat_prompt(prompt, parameters, image_path)
 
         except Exception as e:
             print(e)
             reply = 'So sorry, dear User! ChatGPT is down.'
 
         if reply != "":
-            if len(dialog_character) >= max_size_dialog:
-                dialog_character.pop(0)
-                dialog_character.pop(0)
-            dialog_character.append({"role": "user", "content": prompt})
-            dialog_character.append({"role": "assistant", "content": reply})
-
             bracket_counter = bracket_counter + 1
 
             chunks = split_into_chunks(reply, max_length=1600)
             await send_chunks(message, chunks)
 
+            result = reply
+
+            content = [{
+                "type": "text",
+                "text": result
+            }]
+
+            content = await check_for_images(result, content)
+
+            # if len(dialogue_history) >= max_size_dialog:
+            #     dialogue_history.pop(0)
+            #     dialogue_history.pop(0)
+            dialogue_history.append({"role": "user", "name": author_name, "content": prompt})
+            dialogue_history.append({"role": "assistant", "content": content})
+
+            dialogue_audience.append({
+                "role": "assistant",
+                "content": prompt
+            })
+            dialogue_audience.append({
+                "role": "user",
+                "name": parameters["character"]["name"],
+                "content": content
+            })
         else:
             await message.channel.send("Sorry, couldn't reply")
 
@@ -580,9 +770,28 @@ async def on_message(message):
             # for chunk in chunks:
             #     await channel_last.send(chunk)
 
+# Check if the following includes a drawing to render
+async def check_for_images(result, content):
+    if not parameters["character"]["generate_images"]:
+        return content
+    image_path = await generate_image(result)
+    if image_path is not None:
+        # Check if the file exists
+        if os.path.exists(image_path):
+            # Send the image
+            await channel_last.send(file=discord.File(image_path))
+        else:
+            await channel_last.send('Image file not found.')
+        base64_image = encode_image(image_path)
+        content.append(
+            {"type": "image_url", "image_url": {
+            "url": f"data:image/jpeg;base64,{base64_image}"
+        }})
+    return content
+
 
 async def periodic_task():
-    global dialog_character
+    global dialogue_history, dialogue_audience
     global channel_last, bracket_counter, director_prompts
     global sleep_counter, formatted_time
     global make_a_promise_likelihood, fulfil_a_promise_likelihood
@@ -592,9 +801,11 @@ async def periodic_task():
                     or await client.fetch_channel(channel_last_id))
 
     turn_limit = parameters["audience"]["turn_limit"]
+    director_intervention = parameters["director"]["intervention"]
     write_bio_schedule = parameters["write_bio_schedule"]
 
-    while True:
+    # Loop until the autography is written
+    while bracket_counter <= write_bio_schedule:
         # Get the current time
         now = datetime.now()
 
@@ -615,14 +826,17 @@ async def periodic_task():
             message = ''
 
             # Load prompts from the JSON file
-            prompt = get_director_prompt(director_prompts, bracket_counter)
+            prompt = None
+            username = None
 
-            if prompt is None and bracket_counter < write_bio_schedule:
-                prompt = await get_audience_prompt(bracket_counter)
+            # prompt = get_director_script_prompt(director_prompts, bracket_counter)
+            if bracket_counter % director_intervention == 0:
+                prompt, username = await get_director_prompt(bracket_counter)
+
+            if prompt is None:
+                prompt, username = await get_audience_prompt(bracket_counter)
                 
             if prompt is not None:
-                prompt = f"\n\n\n**Step {bracket_counter}**: {prompt}"
-
                 # if make_a_promise:
                 #     prompt = "Make promise: Generate a very brief note-to-self that will remind you to reflect on events to date at a future point in time."
                 # elif fulfil_a_promise and len(promises) > 0:
@@ -633,7 +847,11 @@ async def periodic_task():
                 # else:
                 #     prompt = elapsed_time_formatted
 
-                await channel_last.send(prompt)
+        
+                await channel_last.send(f"**Step {bracket_counter}**")
+                prompt_to_display = f"*{username}*: {prompt}"
+
+                await channel_last.send(prompt_to_display)
                 result = ''
                 try:
                     result = await chat_prompt(prompt, parameters)
@@ -641,22 +859,47 @@ async def periodic_task():
                     print(e)
                     result = 'So sorry, dear User! ChatGPT is down.'
 
+                character_name = parameters["character"]["name"]
+                result_to_display = f"*{character_name}*: {result}"
+                chunks = split_into_chunks(result_to_display, max_length=1600)
+                for chunk in chunks:
+                    await channel_last.send(chunk)
+                # await channel_last.send(result_to_display)
+
+                content = [{
+                    "type": "text",
+                    "text": result
+                }]
+
+                content = await check_for_images(result, content)
+
                 if result != "":
-                    if len(dialog_character) >= max_size_dialog:
-                        dialog_character.pop(0)
-                        dialog_character.pop(0)
-                    dialog_character.append({
+                    # if len(dialogue_history) >= max_size_dialog:
+                    #     dialogue_history.pop(0)
+                    #     dialogue_history.pop(0)
+                    dialogue_history.append({
                         "role": "user",
+                        "name": username,
                         "content": prompt
                     })
-                    dialog_character.append({
+                    dialogue_history.append({
                         "role": "assistant",
                         "content": result
                     })
-                    bracket_counter = bracket_counter + 1
+
+                    dialogue_audience.append({
+                        "role": "assistant",
+                        "content": prompt
+                    })
+                    dialogue_audience.append({
+                        "role": "user",
+                        "name": parameters["character"]["name"],
+                        "content": content
+                    })
                     if make_a_promise:
                         promises.append(result)
-                await channel_last.send(result)
+
+
 
                 reply = await write_bio()
                 if reply != None:
@@ -677,6 +920,7 @@ async def periodic_task():
         else:
             print("No channel_last_id")
 
+        bracket_counter = bracket_counter + 1
         await asyncio.sleep(sleep_counter)  # sleep for 20 seconds
 
 
@@ -697,38 +941,95 @@ def load_prompts(file_path):
 
 
 # Function to get the prompt for the current step
-def get_director_prompt(prompts, step):
+def get_director_script_prompt(prompts, step):
     for prompt in prompts:
         if prompt['step'] == step:
             return prompt['prompt']
     return None
 
 # Function to get the prompt for the current step
-async def get_audience_prompt(step):
+async def get_director_prompt(step):
     try:
-        prompt_for_audience = parameters["audience"]["prompt"]
+        prompt_for_director = parameters["director"]["prompt"]
+        director_name = parameters["director"]["name"]
+        character_name = parameters["character"]["name"]
 
         messages = []
 
         dialog_history = print_history()
 
-        prompt_for_audience_message = parameters["audience"]["prompt_for_audience_message"]
-        prompt_for_audience_message = eval(
-            f'f"""{prompt_for_audience_message}"""')
+        prompt_for_director_instruction = parameters["director"]["prompt_for_director_instruction"]
+        prompt_for_director_instruction = eval(
+            f'f"""{prompt_for_director_instruction}"""')
         
         messages.append({
             "role":
             "user",
+            "name": character_name,
             "content":
-            f"{prompt_for_audience_message}"
+            f"{prompt_for_director_instruction}"
         })
 
-        return await generate_reply(parameters["audience"]["llm_settings"],
-                                    client_audience, prompt_for_audience,
+        reply = await generate_reply(parameters["director"]["llm_settings"],
+                                    client_director, prompt_for_director,
                                     messages)
+
+        return reply, director_name
     
     except Exception as e:
-        return f"Error in generating audience message! {e}"
+        print(e)
+        return f"Error in generating director message! {e}"
+
+# Function to get the prompt for the current step
+async def get_audience_prompt(step):
+    global dialogue_audience
+
+    try:
+        prompt_for_audience = parameters["audience"]["prompt"]
+        audience_name = parameters["audience"]["name"]
+        character_name = parameters["character"]["name"]
+
+        dialog_history = print_history()
+        
+        last_audience_message = None
+        last_message_content = ''
+        if len(dialogue_audience) > 0:
+            last_audience_message = dialogue_audience.pop()
+            last_message_content_container = last_audience_message["content"]
+            if isinstance(last_message_content_container, list):
+                for message in last_message_content_container:
+                    if message["type"] == "text":
+                        last_message_content = message["text"]
+
+        prompt_for_audience_message = parameters["audience"]["prompt_for_audience_message"]
+        prompt_for_audience_message = eval(
+            f'f"""{prompt_for_audience_message}"""')
+        
+        if last_audience_message == None:
+            last_audience_message = {
+                "role": "user",
+                "name": character_name,
+                "content": [
+                    {"type": "text", 
+                     "text": prompt_for_audience_message}
+                ]
+            }
+        else:
+            for message in last_audience_message["content"]:
+                if message["type"] == "text":
+                    message["text"] = prompt_for_audience_message
+
+        dialogue_audience.append(last_audience_message)
+
+        reply = await generate_reply(parameters["audience"]["llm_settings"],
+                                    client_audience, prompt_for_audience,
+                                    dialogue_audience)
+
+        return reply, audience_name
+    
+    except Exception as e:
+        print(e)
+        return f"Error in generating audience message! {e}", audience_name
 
 def generate_client(model):
     client = None
@@ -747,7 +1048,6 @@ def generate_client(model):
 def reload_settings():
     global client_character, client_narrator, client_audience, client_director
     global parameters
-    global bot_name
     global guild_id, channel_ids
     global sleep_counter, make_a_promise_likelihood, fulfil_a_promise_likelihood
     global director_prompts
@@ -762,7 +1062,6 @@ def reload_settings():
         print(f"Error loading settings file: {e}")
         return
 
-    bot_name = parameters['name']
     channel_ids = parameters['channel_ids']
 
     try:
@@ -787,7 +1086,8 @@ def reload_settings():
         parameters["audience"]["prompt"])
     parameters["audience"]["prompt_for_audience_message"] = load_markdown_content(
         parameters["audience"]['prompt_for_audience_message'])
-    # parameters["director"]["prompt"] = load_markdown_content(parameters["director"]["prompt"])
+    parameters["director"]["prompt"] = load_markdown_content(parameters["director"]["prompt"])
+    parameters["director"]["prompt_for_director_instruction"] = load_markdown_content(parameters["director"]["prompt_for_director_instruction"])
 
     # Load prompts from the JSON file
     director_prompts = load_prompts(parameters["director"]['director_script'])
