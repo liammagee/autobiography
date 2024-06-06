@@ -1,4 +1,4 @@
-Last message:{last_message_content}
+Last message: {last_message_content}
 
 Look carefully over the history of your discussion, including any images. Comment in detail on any images that are supplied.
 

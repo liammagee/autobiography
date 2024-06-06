@@ -108,13 +108,23 @@ async def send_chunks(message, chunks):
 
 async def generate_reply(params, client, system_prompt, messages):
     model = params["model"]
-    if model.startswith("claude-3"):
+    if "claude" in model:
         if messages[0]["role"] == "system":
             system_prompt = messages[0]["content"]
             messages[0].delete(0)
         for m in messages:
-            del m['name']
-
+            if 'name' in m:
+                del m['name']
+            # Ensure 'content' is a list
+            if isinstance(m['content'], list):                
+                to_remove = -1            
+                for index, c in enumerate(m['content']):
+                    if isinstance(c, dict) and  c['type'] == 'image_url':
+                        to_remove = index
+                        break
+                if to_remove > -1:
+                    m['content'].pop(to_remove)
+            
         message = client.messages.create(model=model,
                                          max_tokens=params["max_tokens"],
                                          temperature=params["temperature"],
@@ -265,7 +275,7 @@ async def update_character_instructions():
             "role":
             "user",
             "content":
-            f"{rewrite_memory_instruction}: {prompt_for_character}"
+            f"{rewrite_memory_instruction}"
         })
 
         new_character_prompt = await generate_reply(
@@ -274,15 +284,44 @@ async def update_character_instructions():
         old_character_prompt = parameters["character"]["prompt"]
         parameters["character"]["prompt"] = new_character_prompt
 
-        prompt_update = f"Previous Instruction:\n {old_character_prompt}\n\nRevised Instruction:\n {new_character_prompt}"
+        prompt_update = f"Revised Character:\n {new_character_prompt}"
 
         dialogue_narrator.append({
             "role":
             "user",
             "content":
-            f"{rewrite_memory_instruction}: {prompt_for_character}"
+            f"{rewrite_memory_instruction}"
         })
-        dialogue_narrator.append({"role": "assistant", "content": prompt_update})
+        dialogue_narrator.append({"role": "assistant", "content": new_character_prompt})
+
+
+
+        prompt_for_narrator_rewrite_memory_self = parameters["narrator"]["prompt_for_rewrite_memory_self"]
+        rewrite_memory_instruction = eval(
+            f'f"""{prompt_for_narrator_rewrite_memory_self}"""')
+        messages.append({
+            "role":
+            "user",
+            "content":
+            f"{rewrite_memory_instruction}"
+        })
+
+        new_narrator_prompt = await generate_reply(
+            parameters["narrator"]["llm_settings"], client_narrator,
+            prompt_for_narrator, messages)
+        old_narrator_prompt = parameters["narrator"]["prompt"]
+        parameters["narrator"]["prompt"] = new_narrator_prompt
+
+        prompt_update = f"{prompt_update}\n\n\nRevised Narrator:\n {new_narrator_prompt}"
+
+
+        dialogue_narrator.append({
+            "role":
+            "user",
+            "content":
+            f"{rewrite_memory_instruction}"
+        })
+        dialogue_narrator.append({"role": "assistant", "content": new_narrator_prompt})
 
         return prompt_update
 
@@ -449,9 +488,12 @@ async def clear_chat(interaction: discord.Interaction, limit: int = 0):
 @tree.command(name="reload_settings",
               description="Reload settings",
               guild=discord.Object(guild_id))
-async def clear_chat(interaction: discord.Interaction):
+async def command_reload_settings(interaction: discord.Interaction):
     reload_settings()
-    await interaction.response.send_message(f"Settings reloaded.")
+    try:
+        await interaction.response.send_message(f"Reloading settings...")
+    except Exception as e:
+        print(f"Exception reloading settings: {e}")
 
 
 @tree.command(name="generate_biography",
@@ -462,6 +504,17 @@ async def generate_biography(interaction: discord.Interaction):
     await interaction.response.send_message("Generating biography now...")
     await send_colored_embed(channel_last, "Autobiography", reply, [],
                              discord.Color.green())
+
+@tree.command(name="generate_prompts",
+              description="Generates character and narrator prompts",
+              guild=discord.Object(guild_id))
+async def generate_prompts(interaction: discord.Interaction):
+    prompt_for_character = parameters["character"]["prompt"]
+    prompt_for_narrator = parameters["narrator"]["prompt"]
+    await send_colored_embed(channel_last, "Memory Revision - Character", prompt_for_character, [],
+                             discord.Color.red())
+    await send_colored_embed(channel_last, "Memory Revision - Narrator", prompt_for_narrator, [],
+                             discord.Color.red())
 
 
 # Write the Markdown content to a file
@@ -494,7 +547,7 @@ async def generate_script(interaction: discord.Interaction):
     file_name = os.path.basename(file_link)
     await interaction.response.send_message(file=discord.File(file, file_name))
     await send_colored_embed(channel_last, "The Dialogue so far...", reply, [],
-                             discord.Color.green())
+                             discord.Color.yellow())
 
 
 # Function to encode the image
@@ -504,18 +557,22 @@ def encode_image(image_path):
   
 async def generate_image(prompt):
     try:
-        audience_name = parameters["audience"]["name"]
-        llm_settings = parameters["audience"]["llm_settings"]
+        director_name = parameters["director"]["name"]
+        llm_settings = parameters["director"]["llm_settings"]
         model = llm_settings["model"]
+        
+        prompt_for_director_image_generation = parameters["director"]["prompt_for_director_image_generation"]
+        prompt_for_director_image_generation = eval(
+            f'f"""{prompt_for_director_image_generation}"""')
 
         messages = []
-        messages.append({"role": "system", "content": "You are a creative assistant to an interpreter, and determine whether anything in the respondent's discourse is worth drawing."})
+        messages.append({"role": "system", "content": "You are a creative interpreter of dialogue, and determine whether anything in the respondent's discourse is worth drawing. If so, you will convert that discourse to a detailed prompt for a surrealist image."})
         messages.append({
             "role": "user",
-            "name": audience_name,
-            "content":f"If the following text contains an image to be drawn, create a prompt. Otherwise respond with an empty string.:\n\n{prompt}"
+            "name": director_name,
+            "content": prompt_for_director_image_generation
         })
-        response = await client_audience.chat.completions.create(
+        response = await client_director.chat.completions.create(
             model=model,
             messages=messages,
             max_tokens=llm_settings["max_tokens"],
@@ -528,10 +585,12 @@ async def generate_image(prompt):
         if reply == "" or reply == '""':
             return None
         
-        response = await client_audience.images.generate(
+        print(f"Image prompt: {reply}")
+
+        response = await client_director.images.generate(
             model="dall-e-3",
             prompt=reply,
-            size="1024x1024",
+            size="1792x1024",
             quality="standard",
             n=1,
         )
@@ -624,9 +683,9 @@ async def send_colored_embed(channel,
         embed = discord.Embed(title=title if i == 0 else f"{title} (cont.)", description=chunk, color=color)
         
         # Add fields only to the first embed
-        if i == 0:
-            for name, value, inline in fields:
-                embed.add_field(name=name, value=value, inline=inline)
+        # if i == 0:
+        for name, value, inline in fields:
+            embed.add_field(name=name, value=value, inline=inline)
 
         # Send the embed
         await channel.send(embed=embed)
@@ -950,14 +1009,18 @@ def get_director_script_prompt(prompts, step):
 # Function to get the prompt for the current step
 async def get_director_prompt(step):
     try:
-        prompt_for_director = parameters["director"]["prompt"]
         director_name = parameters["director"]["name"]
         character_name = parameters["character"]["name"]
+        audience_name = parameters["audience"]["name"]
 
         messages = []
 
         dialog_history = print_history()
 
+        prompt_for_director = parameters["director"]["prompt"]
+        prompt_for_director = eval(
+            f'f"""{prompt_for_director}"""')
+        
         prompt_for_director_instruction = parameters["director"]["prompt_for_director_instruction"]
         prompt_for_director_instruction = eval(
             f'f"""{prompt_for_director_instruction}"""')
@@ -1004,16 +1067,25 @@ async def get_audience_prompt(step):
         prompt_for_audience_message = parameters["audience"]["prompt_for_audience_message"]
         prompt_for_audience_message = eval(
             f'f"""{prompt_for_audience_message}"""')
-        
+
         if last_audience_message == None:
-            last_audience_message = {
-                "role": "user",
-                "name": character_name,
-                "content": [
-                    {"type": "text", 
-                     "text": prompt_for_audience_message}
-                ]
-            }
+            if 'claude' in parameters["audience"]["llm_settings"]["model"]:
+                last_audience_message = {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", 
+                        "text": f"{character_name}: {prompt_for_audience_message}"}
+                    ]
+                }
+            else:
+                last_audience_message = {
+                    "role": "user",
+                    "name": character_name,
+                    "content": [
+                        {"type": "text", 
+                        "text": f"{prompt_for_audience_message}"}
+                    ]
+                }
         else:
             for message in last_audience_message["content"]:
                 if message["type"] == "text":
@@ -1028,8 +1100,9 @@ async def get_audience_prompt(step):
         return reply, audience_name
     
     except Exception as e:
-        print(e)
-        return f"Error in generating audience message! {e}", audience_name
+        error_message = f"Error in generating audience message! {e}"
+        print(error_message)
+        return error_message, audience_name
 
 def generate_client(model):
     client = None
@@ -1053,6 +1126,7 @@ def reload_settings():
     global director_prompts
     global subject
     global bracket_counter
+    global dialogue_history, dialogue_narrator, dialogue_audience, dialogue_director
 
     # Load the settings file
     try:
@@ -1083,14 +1157,24 @@ def reload_settings():
         parameters["narrator"]['prompt_for_bio'])
     parameters["narrator"]["prompt_for_rewrite_memory"] = load_markdown_content(
         parameters["narrator"]['prompt_for_rewrite_memory'])
+    parameters["narrator"]["prompt_for_rewrite_memory_self"] = load_markdown_content(
+        parameters["narrator"]['prompt_for_rewrite_memory_self'])
     parameters["audience"]["prompt"] = load_markdown_content(
         parameters["audience"]["prompt"])
     parameters["audience"]["prompt_for_audience_message"] = load_markdown_content(
         parameters["audience"]['prompt_for_audience_message'])
     parameters["director"]["prompt"] = load_markdown_content(parameters["director"]["prompt"])
     parameters["director"]["prompt_for_director_instruction"] = load_markdown_content(parameters["director"]["prompt_for_director_instruction"])
+    parameters["director"]["prompt_for_director_image_generation"] = load_markdown_content(parameters["director"]["prompt_for_director_image_generation"])
+
+    # Reset dialogue
+    dialogue_history = []
+    dialogue_narrator = []
+    dialogue_audience = []
+    dialogue_director = []    
 
     # Load prompts from the JSON file
+
     director_prompts = load_prompts(parameters["director"]['director_script'])
 
     client_character = generate_client(parameters["character"]["llm_settings"]["model"])

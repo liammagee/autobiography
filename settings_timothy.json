@@ -2,7 +2,7 @@
 
     "guild_id": "1015035862536437810",                 
     "discord_token_env_var": "DISCORD_BOTOKEN_TIMOTHY",
-    "channel_ids": [1239371274090709053, 1244445094942343218],
+    "channel_ids": [1244445094942343218],
 
     "summarise_level": 0,
     "max_size_dialog": 40000,
@@ -18,7 +18,7 @@
     "character": {
         "name": "Zhang",
         "prompt": "drama/timothy_mischief.md",
-        "generate_images": false,
+        "generate_images": true,
         "llm_settings": {
             "model":"gpt-4o",
             "stop_sequences": ["\n"],
@@ -34,11 +34,12 @@
         "prompt": "drama/ben_superego.md",
         "prompt_for_bio": "drama/ben_bio.md",
         "prompt_for_rewrite_memory": "drama/ben_rewrite_memory_2.md",
+        "prompt_for_rewrite_memory_self": "drama/ben_rewrite_memory_self.md",
         "llm_settings": {
             "model":"llama3-70b-8192",
             "stop_sequences": ["\n"],
             "max_tokens": 500,
-            "temperature": 0.3,
+            "temperature": 1.0,
             "top_p": 1.0,
             "frequency_penalty": 2.0,
             "presence_penalty": 2.0
@@ -50,7 +51,7 @@
         "prompt_for_audience_message": "drama/sasha_interviewer_query.md",
         "turn_limit": 5,
         "llm_settings": {
-            "model":"gpt-4o",
+            "model":"claude-3-opus-20240229",
             "stop_sequences": ["\n"],
             "max_tokens": 250,
             "temperature": 1.0,
@@ -63,10 +64,11 @@
         "name": "Ashley",
         "prompt": "drama/ashley_director.md",
         "prompt_for_director_instruction": "drama/ashley_director_instruction.md",
+        "prompt_for_director_image_generation": "drama/ashley_director_image_generation.md",
         "intervention": 5,
         "director_script": "drama/script_none.json",
         "llm_settings": {
-            "model":"claude-3-opus-20240229",
+            "model":"gpt-4o",
             "stop_sequences": ["\n"],
             "max_tokens": 1000,
             "temperature": 0,
