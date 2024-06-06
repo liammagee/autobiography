@@ -1052,6 +1052,7 @@ def reload_settings():
     global sleep_counter, make_a_promise_likelihood, fulfil_a_promise_likelihood
     global director_prompts
     global subject
+    global bracket_counter
 
     # Load the settings file
     try:
@@ -1096,6 +1097,8 @@ def reload_settings():
     client_narrator = generate_client(parameters["narrator"]["llm_settings"]["model"])
     client_audience = generate_client(parameters["audience"]["llm_settings"]["model"])
     client_director = generate_client(parameters["director"]["llm_settings"]["model"])
+
+    bracket_counter = 1
 
 
 def main():
