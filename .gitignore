@@ -164,3 +164,6 @@ images/
 scripts/
 
 .DS_Store
+
+# Ignore dialogue settings
+dialogue*

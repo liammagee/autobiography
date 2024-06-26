@@ -6,6 +6,8 @@ import requests
 from urllib.parse import urlparse
 import base64
 
+import re
+
 from openai import OpenAI, AsyncOpenAI
 import anthropic
 from groq import Groq, AsyncGroq
@@ -49,14 +51,15 @@ parameters = {}
 # Drama
 subject = 'Nosubject'
 
-client_character = None
-client_narrator = None
-client_audience = None
+client_ego = None
+client_superego = None
+client_other = None
 client_director = None
 
 dialogue_history = []
-dialogue_narrator = []
-dialogue_audience = []
+dialogue_ego = []
+dialogue_superego = []
+dialogue_other = []
 dialogue_director = []
 
 director_prompts = {}
@@ -78,24 +81,24 @@ make_a_promise_likelihood = 0.5
 fulfil_a_promise_likelihood = 0.5
 promises = []
 
-bracket_counter = 1
+bracket_counter = 0
 
 
 def split_into_chunks(text, max_length=2000):
     chunks = []
-    words = text.split()
+    lines = text.split('\n')
 
-    if not words:
+    if not lines:
         return chunks
 
-    current_chunk = words[0]
+    current_chunk = lines[0]
 
-    for word in words[1:]:
-        if len(current_chunk) + len(word) + 1 > max_length:
+    for line in lines[1:]:
+        if len(current_chunk) + len(line) + 1 > max_length:
             chunks.append(current_chunk)
-            current_chunk = word
+            current_chunk = line
         else:
-            current_chunk += ' ' + word
+            current_chunk += '\n' + line
 
     chunks.append(current_chunk)
     return chunks
@@ -107,6 +110,20 @@ async def send_chunks(message, chunks):
 
 
 async def generate_reply(params, client, system_prompt, messages):
+    if "stop_sequences" not in params:
+        params["stop_sequences"] = []
+    if "temperature" not in params:
+        params["temperature"] = 0.5
+    if "max_tokens" not in params:
+        params["max_tokens"] = 256
+    if "frequency_penalty" not in params:
+        params["frequency_penalty"] = 1.0
+    if "presence_penalty" not in params:
+        params["presence_penalty"] = 1.0
+    if "top_p" not in params:
+        params["top_p"] = 1.0
+    if "top_k" not in params:
+        params["top_k"] = 1.0
     model = params["model"]
     if "claude" in model:
         if messages[0]["role"] == "system":
@@ -124,12 +141,13 @@ async def generate_reply(params, client, system_prompt, messages):
                         break
                 if to_remove > -1:
                     m['content'].pop(to_remove)
-            
+        
         message = client.messages.create(model=model,
+                                         system=system_prompt,
+                                         messages=messages,
                                          max_tokens=params["max_tokens"],
                                          temperature=params["temperature"],
-                                         system=system_prompt,
-                                         messages=messages)
+                                            stop_sequences=params["stop_sequences"])
         reply = message.content[0].text
     else:
         if messages[0]["role"] != "system":
@@ -139,6 +157,9 @@ async def generate_reply(params, client, system_prompt, messages):
             messages=messages,
             max_tokens=params["max_tokens"],
             temperature=params["temperature"],
+            stop=params["stop_sequences"],
+            frequency_penalty=params["frequency_penalty"],
+            presence_penalty=params["presence_penalty"]
         )
         if response != 0:
             reply = response.choices[0].message.content
@@ -146,48 +167,81 @@ async def generate_reply(params, client, system_prompt, messages):
     return reply
 
 
+def detect_unterminated_strings(code):
+    # Regular expression to find all strings
+    string_pattern = re.compile(r'(["\'])(?:(?!\1).|\\.)*?\1?')
+    matches = string_pattern.finditer(code)
+    
+    unterminated_strings = []
+    for match in matches:
+        string = match.group(0)
+        if len(string) > 1 and string[-1] not in ('"', "'"):  # Not properly closed
+            unterminated_strings.append(match)
+    
+    return unterminated_strings
+
+def fix_unterminated_strings(code):
+    unterminated_strings = detect_unterminated_strings(code)
+    if not unterminated_strings:
+        return code  # No unterminated strings detected
+
+    fixed_code = []
+    last_end = 0
+    
+    for match in unterminated_strings:
+        start, end = match.span()
+        fixed_code.append(code[last_end:start])
+        string = match.group(0)
+        quote_type = string[0]
+        
+        # Add missing closing quote
+        if string[-1] != quote_type:
+            fixed_code.append(string + quote_type)
+        else:
+            fixed_code.append(string)
+        
+        last_end = end
+
+    fixed_code.append(code[last_end:])
+    return ''.join(fixed_code)
+
+
 async def chat_prompt_internal(prompt, parameters, messages, image_path = None):
     try:
-        prompt_for_narrator = parameters["narrator"]["prompt"]
-        prompt_for_narrator = eval(f'f"""{prompt_for_narrator}"""')
-        narrator_name = parameters["narrator"]["name"]
+        prompt_for_superego = parameters["superego"]["prompt"]
+        prompt_for_superego = eval(f'f"""{prompt_for_superego}"""')
+        superego_name = parameters["superego"]["name"]
 
         content = [{"type": "text", "text": prompt}]
 
             
         messages = []
-        messages.append({"role": "user", "name": narrator_name, "content": content})
+        messages.append({"role": "user", "name": superego_name, "content": content})
 
-        return await generate_reply(parameters["narrator"]["llm_settings"],
-                                    client_narrator, prompt_for_narrator,
+        return await generate_reply(parameters["superego"]["llm_settings"],
+                                    client_superego, prompt_for_superego,
                                     messages)
     except Exception as e:
-        print(f"Error in chat prompt: {e}")
+        print(f"Error in internal chat prompt: {e}")
         return {"role": "system", "content": "Looks like ChatGPT is down!"}
 
 
 async def chat_prompt(prompt, parameters, image_path = None):
     try:
-        prompt_for_character = parameters["character"]["prompt"]
-        prompt_for_character = eval(f'f"""{prompt_for_character}"""')
-        audience_name = parameters["character"]["name"]
+        prompt_for_ego = parameters["ego"]["prompt"]
+        prompt_for_ego = fix_unterminated_strings(prompt_for_ego)
+        prompt = fix_unterminated_strings(prompt)
+        prompt_for_ego = eval(f'f"""{prompt_for_ego}"""')
+        ego_name = parameters["ego"]["name"]
+        other_name = parameters["other"]["name"]
 
-        history = build_history()
+        history = build_history(dialogue_ego)
         messages = []
         for item in history:
             messages.append(item)
 
-        # internal_messages = []
-        # for item in history:
-        #     internal_messages.append(item)
-        # internal_messages.append({"role": "user", "content": f"About me: {prompt_for_character}"})
-        # internal_prompt = f"Given what you know about me, what should I say in reply to this '{prompt}'?"
-        # internal_reply = await chat_prompt_internal(internal_prompt, parameters, messages)
-        # inserted_prompt = f"When you are asked this '{prompt}'?"
-        # messages.append({"role": "user", "content": inserted_prompt})
-        # messages.append({"role": "assistant", "content": internal_reply})
-
         content = [{"type": "text", "text": prompt}]
+
         if image_path is not None:
             # Getting the base64 string
             base64_image = encode_image(image_path)
@@ -195,19 +249,13 @@ async def chat_prompt(prompt, parameters, image_path = None):
                             "image_url": {
                             "url": f"data:image/jpeg;base64,{base64_image}"
             }})
-        messages.append({"role": "user", "name": audience_name, "content": content})
 
-        reply = await generate_reply(parameters["character"]["llm_settings"],
-                                     client_character, prompt_for_character,
+        messages.append({"role": "user", "name": other_name, "content": content})
+
+        reply = await generate_reply(parameters["ego"]["llm_settings"],
+                                     client_ego, prompt_for_ego,
                                      messages)
-
-        # print("*****")
-        # counter = 1
-        # for message in messages:
-        #     print(str(counter)+": "+message["content"][0:50])
-        #     counter = counter + 1
-        # print(str(counter)+": "+reply[0:50])
-
+        
         return reply
     except Exception as e:
         print(f"Error in chat prompt: {e}")
@@ -217,7 +265,7 @@ async def chat_prompt(prompt, parameters, image_path = None):
 async def write_bio():
     global dialogue_history, parameters
 
-    if bracket_counter % parameters["write_bio_schedule"] != 0:
+    if bracket_counter == 0 or bracket_counter % parameters["ego"]["write_bio_schedule"] != 0:
         return None
 
     autobiography = await generate_autobiography_from_dialogue()
@@ -225,118 +273,106 @@ async def write_bio():
     return autobiography
 
 
-async def update_character_instructions():
-    global dialogue_history, parameters
+async def update_ego_instructions():
+    global dialogue_history, dialogue_ego, parameters
 
     try:
-        prompt_for_character = parameters["character"]["prompt"]
-        prompt_for_narrator = parameters["narrator"]["prompt"]
+        prompt_for_ego = parameters["ego"]["prompt"]
+        ego_name = parameters["ego"]["name"]
+        name_for_ego = parameters["ego"]["name"]
+        prompt_for_superego = parameters["superego"]["prompt"]
+        name_for_superego = parameters["superego"]["name"]
         
+        dialog_history = print_history()
+        prompt_update = ''
 
+        # Update superego
         messages = []
 
-        # history = build_history()
-        # write_bio_instruction = parameters["write_bio_instruction"]
-        # messages.append({'role': 'user', 'content': f"{write_bio_instruction}: '{history}'."})
-        # reply = await generate_reply(parameters["gpt_settings_narrator"], client_narrator, prompt_for_narrator, messages)
-        # del messages[0]
-        # messages.append({'role': 'assistant', 'content': reply})
+        prompt_for_superego_rewrite_memory_self = parameters["superego"]["prompt_for_rewrite_memory_self"]
+        rewrite_memory_instruction = eval(
+            f'f"""{prompt_for_superego_rewrite_memory_self}"""')
+        messages.append({
+            "role":
+            "user",
+            "content":
+            f"{rewrite_memory_instruction}"
+        })
 
+        new_superego_prompt = await generate_reply(
+            parameters["superego"]["llm_settings"], 
+            client_superego,
+            parameters["superego"]["prompt"], 
+            messages)
+        old_superego_prompt = parameters["superego"]["prompt"]
+        parameters["superego"]["prompt"] = new_superego_prompt
+
+        prompt_update = f"{prompt_update}Revised superego:\n {new_superego_prompt}"
+        dialogue_superego.append({
+            "role":
+            "user",
+            "content":
+            f"{rewrite_memory_instruction}"
+        })
+        dialogue_superego.append({"role": "assistant", "content": new_superego_prompt})
+
+
+        # Update ego
+        messages = []
+
+        prompt_for_superego_rewrite_memory = parameters["superego"]["prompt_for_rewrite_memory"]
+        rewrite_memory_instruction = eval(
+            f'f"""{prompt_for_superego_rewrite_memory}"""')
+        messages.append({
+            "role":
+            "user",
+            "content":
+            f"{rewrite_memory_instruction}"
+        })
+
+        # Check these parameters carefully - note the ego model is used here
+        new_ego_prompt = await generate_reply(
+            parameters["superego"]["llm_settings"], 
+            client_superego,
+            parameters["superego"]["prompt"], 
+            messages)
+        old_ego_prompt = parameters["ego"]["prompt"]
+        parameters["ego"]["prompt"] = new_ego_prompt
+
+        
+        # prompt_update = f"{prompt_update}\n\n\nRevised ego:\n {new_ego_prompt}"
+        prompt_update = f"Old ego: {old_ego_prompt}\n\n\nRevised ego:\n {new_ego_prompt}"
+
+        dialogue_superego.append({
+            "role":
+            "user",
+            "content":
+            f"{rewrite_memory_instruction}"
+        })
+        dialogue_superego.append({"role": "assistant", "content": new_ego_prompt})
+
+        # Rewrite chat history
+        history = build_history()
+        
         # Rewrite history
-        # messages_to_rewrite = int(parameters["rewrite_memory"]) * 2
-        # messages = []
-        # for message in dialogue_history[-messages_to_rewrite:]:
-        #     if message['role'] == 'assistant':
-        #         content = message['content']
-        #         messages.append({'role': 'user', 'content': f"Review and revise the following: '{content}'. Include nothing but the revised statement."})
-        #         reply = await generate_reply(client_character, parameters, parameters, prompt_for_narrator, messages)
-        #         # Remove first system message
-        #         del messages[0]
-        #         messages.append({'role': 'assistant', 'content': reply})
-        #         message['content'] = reply
+        messages = []
 
-        # print(dialogue_history[-1:]['content'])
-        # reply = await generate_reply(client_character, parameters, parameters["model"], prompt_for_narrator, messages)
-        # messages.append({"role": "assistant", "content": reply})
-        # messages.append({"role": "user", "content": f"Analyse this text: ."})
-
-        # reply2 = await generate_reply(client_character, parameters, parameters["model"], prompt_for_narrator, messages)
-        # prompt_for_narrator = reply2
-        # parameters["prompt_for_narrator"] = reply2
-
-        # rewrite_memory_instruction = parameters["rewrite_memory_instruction"]
-
-        dialog_history = print_history()
-
-        prompt_for_narrator_rewrite_memory = parameters["narrator"]["prompt_for_rewrite_memory"]
-        rewrite_memory_instruction = eval(
-            f'f"""{prompt_for_narrator_rewrite_memory}"""')
-        messages.append({
-            "role":
-            "user",
-            "content":
-            f"{rewrite_memory_instruction}"
-        })
-
-        new_character_prompt = await generate_reply(
-            parameters["narrator"]["llm_settings"], client_narrator,
-            prompt_for_narrator, messages)
-        old_character_prompt = parameters["character"]["prompt"]
-        parameters["character"]["prompt"] = new_character_prompt
-
-        prompt_update = f"Revised Character:\n {new_character_prompt}"
-
-        dialogue_narrator.append({
-            "role":
-            "user",
-            "content":
-            f"{rewrite_memory_instruction}"
-        })
-        dialogue_narrator.append({"role": "assistant", "content": new_character_prompt})
-
-
-
-        prompt_for_narrator_rewrite_memory_self = parameters["narrator"]["prompt_for_rewrite_memory_self"]
-        rewrite_memory_instruction = eval(
-            f'f"""{prompt_for_narrator_rewrite_memory_self}"""')
-        messages.append({
-            "role":
-            "user",
-            "content":
-            f"{rewrite_memory_instruction}"
-        })
-
-        new_narrator_prompt = await generate_reply(
-            parameters["narrator"]["llm_settings"], client_narrator,
-            prompt_for_narrator, messages)
-        old_narrator_prompt = parameters["narrator"]["prompt"]
-        parameters["narrator"]["prompt"] = new_narrator_prompt
-
-        prompt_update = f"{prompt_update}\n\n\nRevised Narrator:\n {new_narrator_prompt}"
-
-
-        dialogue_narrator.append({
-            "role":
-            "user",
-            "content":
-            f"{rewrite_memory_instruction}"
-        })
-        dialogue_narrator.append({"role": "assistant", "content": new_narrator_prompt})
 
         return prompt_update
 
     except Exception as e:
-        print(e)
-        return f"Couldn't update intructions! {e}"
+        error_message = f"Error updating ego instructions: {e}"
+        print(error_message)
+        return error_message
 
 
 async def revise_memory():
     global bracket_counter, parameters
 
-    if bracket_counter % parameters["rewrite_memory_schedule"] != 0:
+    if bracket_counter == 0 or bracket_counter % parameters["superego"]["rewrite_memory_schedule"] != 0:
         return None
 
-    reply = await update_character_instructions()
+    reply = await update_ego_instructions()
 
     # if reply != None:
     #     await send_colored_embed(channel_last, "Instruction Set", reply, [], discord.Color.red())
@@ -347,19 +383,22 @@ async def revise_memory():
 async def generate_autobiography_from_dialogue():
     write_bio_instruction = ''
     try:
-        prompt_for_narrator = parameters["narrator"]["prompt"]
-        prompt_for_narrator = eval(f'f"""{prompt_for_narrator}"""')
+        prompt_for_ego = parameters["ego"]["prompt"]
+        prompt_for_ego = eval(f'f"""{prompt_for_ego}"""')
+        ego_name = parameters["ego"]["name"]
+        superego_name = parameters["superego"]["name"]
+        other_name = parameters["other"]["name"]
 
         messages = []
 
         dialog_history = build_history()
 
-        prompt_for_narrator_bio = parameters["narrator"]["prompt_for_bio"]
-        write_bio_instruction = eval(f'f"""{prompt_for_narrator_bio}"""')
+        prompt_for_ego_bio = parameters["ego"]["prompt_for_bio"]
+        write_bio_instruction = eval(f'f"""{prompt_for_ego_bio}"""')
         messages.append({"role": "user", "content": write_bio_instruction})
 
-        reply = await generate_reply(parameters["narrator"]["llm_settings"],
-                                    client_narrator, prompt_for_narrator,
+        reply = await generate_reply(parameters["ego"]["llm_settings"],
+                                    client_ego, prompt_for_ego,
                                     messages)
         
         return reply
@@ -370,30 +409,40 @@ async def generate_autobiography_from_dialogue():
         return "Error!"
 
 
-async def generate_script_from_dialogue():
-    global parameters
+async def generate_script_from_dialogue(write_bio_reply):
+    global parameters, subject
 
     try:
 
         history = build_history()
 
-        prompt_for_character = parameters["character"]["prompt"]
-        name_for_character = parameters["character"]["name"]
-        builder = f'system: {prompt_for_character}\n\n'
+        prompt_for_ego = parameters["ego"]["prompt"]
+        name_for_ego = parameters["ego"]["name"]
+
+        builder = f"## Settings\n\n{format_settings()}"
+        builder += f'Ego prompt: {prompt_for_ego}\n\n'
+        
         for message in history:
             role = message['role']
             username = role
             if 'name' in message:
                 username = message['name']
             elif role == 'assistant':
-                username = name_for_character
+                username = name_for_ego
             content = message['content']
             builder += f"{username}: {content}\n\n"
 
-        return builder
+        builder += f"## Autobiography (as told by the ego)\n\n{write_bio_reply}.\n\n"
+
+        # Write content to file
+        file_link = unique_filename('./')
+        file = write_markdown_to_file(builder, file_link)
+        file_name = os.path.basename(file_link)
+        return file_name, file
+            
     except Exception as e:
         print(e)
-        return f"No history, due to {e}"
+        return f"No history, due to {e}", None
 
 
 @client.event
@@ -430,7 +479,7 @@ async def get_params(interaction: discord.Interaction):
     name="set", description="Set parameters", guild=discord.Object(guild_id)
 )  #Add the guild ids in which the slash command will appear. If it should be in all, remove the argument, but note that it will take some time (up to an hour) to register the command if it's for all guilds.
 async def set_params(interaction,
-                     prompt_for_character: str = None,
+                     prompt_for_ego: str = None,
                      model_id: int = None,
                      temperature: float = None,
                      top_p: float = None,
@@ -440,8 +489,8 @@ async def set_params(interaction,
                      max_size_dialog: int = None,
                      channel_reset: str = None):
     global dialogue_history
-    if prompt_for_character is not None:
-        parameters["character"]["prompt"] = prompt_for_character
+    if prompt_for_ego is not None:
+        parameters["ego"]["prompt"] = prompt_for_ego
     if model_id is not None:
         model = all_models[model_id]
         parameters["model_id"] = str(model_id)
@@ -506,14 +555,14 @@ async def generate_biography(interaction: discord.Interaction):
                              discord.Color.green())
 
 @tree.command(name="generate_prompts",
-              description="Generates character and narrator prompts",
+              description="Generates ego and superego prompts",
               guild=discord.Object(guild_id))
 async def generate_prompts(interaction: discord.Interaction):
-    prompt_for_character = parameters["character"]["prompt"]
-    prompt_for_narrator = parameters["narrator"]["prompt"]
-    await send_colored_embed(channel_last, "Memory Revision - Character", prompt_for_character, [],
+    prompt_for_ego = parameters["ego"]["prompt"]
+    prompt_for_superego = parameters["superego"]["prompt"]
+    await send_colored_embed(channel_last, "Memory Revision - ego", prompt_for_ego, [],
                              discord.Color.red())
-    await send_colored_embed(channel_last, "Memory Revision - Narrator", prompt_for_narrator, [],
+    await send_colored_embed(channel_last, "Memory Revision - superego", prompt_for_superego, [],
                              discord.Color.red())
 
 
@@ -529,25 +578,19 @@ def generate_file_link(file_path, base_url):
     return f"{base_url}/{file_name}"
 
 # Generate a unique file name using timestamp
-def generate_unique_filename(base_path, extension='md'):
+def unique_filename(base_path, extension='md'):
+    global subject
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    return os.path.join(base_path, f'dialogue_{timestamp}.{extension}')
+    return os.path.join(base_path, f'dialogue_{subject}_{timestamp}.{extension}')
 
 @tree.command(name="generate_script",
               description="Generates the conversation as a script",
               guild=discord.Object(guild_id))
 async def generate_script(interaction: discord.Interaction):
-    reply = await generate_script_from_dialogue()
-    
-    # await interaction.response.send_message("Generating script now...")
-
-    # Write content to file
-    file_link = generate_unique_filename('./')
-    file = write_markdown_to_file(reply, file_link)
-    file_name = os.path.basename(file_link)
+    write_bio_reply = await write_bio()
+    file_name, file = await generate_script_from_dialogue(write_bio_reply)
     await interaction.response.send_message(file=discord.File(file, file_name))
-    await send_colored_embed(channel_last, "The Dialogue so far...", reply, [],
-                             discord.Color.yellow())
+    
 
 
 # Function to encode the image
@@ -621,26 +664,29 @@ async def generate_image(prompt):
 
 
 
-def build_history():
+def build_history(dialogue = None):
+    if dialogue is None:
+        dialogue = dialogue_history
+
     # GPT limit, minus max response token size
-    token_limit = 16097 - parameters["character"]["llm_settings"]["max_tokens"]
+    token_limit = 16097 - parameters["ego"]["llm_settings"]["max_tokens"]
 
     # Tokenize the string to get the number of tokens
     tokens_len = 0
 
     # Iterate through the list in reverse order
-    dialogue_history_limited = []
-    for item in reversed(dialogue_history):
+    dialogue_limited = []
+    for item in reversed(dialogue):
         tokens_item = tokenizer(str(item) + "\n", return_tensors='pt')
         tokens_item_len = tokens_item.input_ids.size(1)
         if tokens_len + tokens_item_len < token_limit:
             tokens_len = tokens_len + tokens_item_len
-            dialogue_history_limited.insert(0, item)
+            dialogue_limited.insert(0, item)
         else:
             break
 
     # Construct the dialog history
-    return dialogue_history_limited
+    return dialogue_limited
 
 
 def print_history():
@@ -689,18 +735,7 @@ async def send_colored_embed(channel,
 
         # Send the embed
         await channel.send(embed=embed)
-    # # Truncate the description if it's too long
-    # description = description[:4096]
 
-    # # Create an embed object
-    # embed = discord.Embed(title=title, description=description, color=color)
-
-    # # Add fields to the embed
-    # for name, value, inline in fields:
-    #     embed.add_field(name=name, value=value, inline=inline)
-
-    # # Send the embed
-    # await channel.send(embed=embed)
 
 async def download_image(url, filename):
     # Send a GET request to the URL
@@ -723,7 +758,7 @@ async def download_image(url, filename):
 @client.event
 async def on_message(message):
     global dialogue_history
-    global prompt_for_character
+    global prompt_for_ego
     global user_refs
     global channel_last
     global bracket_counter
@@ -753,8 +788,8 @@ async def on_message(message):
     elif author.name not in user_refs:
         user_refs.append(author.name)
 
-    prompt_for_character = parameters["character"]["prompt"]
-    prompt_for_narrator = parameters["narrator"]["prompt"]
+    prompt_for_ego = parameters["ego"]["prompt"]
+    prompt_for_superego = parameters["superego"]["prompt"]
 
 # Check if the message has attachments
     image_path = None
@@ -781,7 +816,6 @@ async def on_message(message):
             reply = 'So sorry, dear User! ChatGPT is down.'
 
         if reply != "":
-            bracket_counter = bracket_counter + 1
 
             chunks = split_into_chunks(reply, max_length=1600)
             await send_chunks(message, chunks)
@@ -801,37 +835,35 @@ async def on_message(message):
             dialogue_history.append({"role": "user", "name": author_name, "content": prompt})
             dialogue_history.append({"role": "assistant", "content": content})
 
-            dialogue_audience.append({
+            dialogue_other.append({
                 "role": "assistant",
                 "content": prompt
             })
-            dialogue_audience.append({
+            dialogue_other.append({
                 "role": "user",
-                "name": parameters["character"]["name"],
+                "name": parameters["ego"]["name"],
                 "content": content
             })
         else:
             await message.channel.send("Sorry, couldn't reply")
 
-        reply_bio = await write_bio()
-        if reply_bio != None:
-            await send_colored_embed(channel_last, "Autobiography", reply_bio,
-                                     [], discord.Color.green())
-            # chunks = split_into_chunks(reply, max_length=1600)
-            # for chunk in chunks:
-            #     await channel_last.send(chunk)
-
         reply_revision = await revise_memory()
         if reply_revision != None:
             await send_colored_embed(channel_last, "Memory Revision",
                                      reply_revision, [], discord.Color.red())
-            # chunks = split_into_chunks(reply, max_length=1600)
-            # for chunk in chunks:
-            #     await channel_last.send(chunk)
+
+        reply_bio = await write_bio()
+        if reply_bio != None:
+            await send_colored_embed(channel_last, "Autobiography", reply_bio,
+                                     [], discord.Color.green())
+            file_name, file = await generate_script_from_dialogue(reply_bio)
+            await message.channel.send(file=discord.File(file, file_name))
+
+        bracket_counter = bracket_counter + 1
 
 # Check if the following includes a drawing to render
 async def check_for_images(result, content):
-    if not parameters["character"]["generate_images"]:
+    if not parameters["ego"]["generate_images"]:
         return content
     image_path = await generate_image(result)
     if image_path is not None:
@@ -848,9 +880,56 @@ async def check_for_images(result, content):
         }})
     return content
 
+def format_settings():
+    global parameters
+
+    ego_name = parameters["ego"]["name"]
+    superego_name = parameters["superego"]["name"]
+    other_name = parameters["other"]["name"]
+    director_name = parameters["director"]["name"]
+
+    ego_model = parameters["ego"]["llm_settings"]["model"]
+    ego_temperature = parameters["ego"]["llm_settings"]["temperature"]
+    ego_write_bio_schedule = parameters["ego"]["write_bio_schedule"]
+
+    superego_model = parameters["superego"]["llm_settings"]["model"]
+    superego_temperature = parameters["superego"]["llm_settings"]["temperature"]
+    superego_likelihood_to_rewrite_others_prompt = parameters["superego"]["likelihood_to_rewrite_others_prompt"]
+    superego_likelihood_to_suggest_alternate_response = parameters["superego"]["likelihood_to_suggest_alternate_response"]
+    superego_rewrite_memory_schedule = parameters["superego"]["rewrite_memory_schedule"]
+
+    other_model = parameters["other"]["llm_settings"]["model"]
+    other_temperature = parameters["other"]["llm_settings"]["temperature"]
+    
+    director_model = parameters["director"]["llm_settings"]["model"]
+    director_temperature = parameters["director"]["llm_settings"]["temperature"]
+    director_intervention = parameters["director"]["intervention"]
+
+    settings_messages = f"""
+**Subject**: {subject}
+
+Ego is called: *{ego_name}*.
+Ego uses *{ego_model}* with temperature of {ego_temperature}.
+Ego writes a bio note every {ego_write_bio_schedule} turns.
+
+Superego is called: *{superego_name}*.
+Superego uses *{superego_model}* with temperature of {superego_temperature}.
+Superego has a {superego_likelihood_to_rewrite_others_prompt * 100} percent chance of rewriting the other's prompt.
+Superego has a {superego_likelihood_to_suggest_alternate_response * 100} percent chance of suggesting an alternate response.
+Superego rewrites the ego's system prompt every {superego_rewrite_memory_schedule} turns.
+
+Other character is called: *{other_name}*.
+Other character uses *{other_model}* with temperature of {other_temperature}.
+
+Director is called: *{director_name}*.
+Director uses *{director_model}* with temperature of {director_temperature}.
+Director intervenes every {director_intervention} turns.
+
+"""
+    return settings_messages
 
 async def periodic_task():
-    global dialogue_history, dialogue_audience
+    global dialogue_history, dialogue_other
     global channel_last, bracket_counter, director_prompts
     global sleep_counter, formatted_time
     global make_a_promise_likelihood, fulfil_a_promise_likelihood
@@ -859,9 +938,8 @@ async def periodic_task():
     channel_last = (client.get_channel(channel_last_id)
                     or await client.fetch_channel(channel_last_id))
 
-    turn_limit = parameters["audience"]["turn_limit"]
     director_intervention = parameters["director"]["intervention"]
-    write_bio_schedule = parameters["write_bio_schedule"]
+    write_bio_schedule = parameters["ego"]["write_bio_schedule"]
 
     # Loop until the autography is written
     while bracket_counter <= write_bio_schedule:
@@ -881,103 +959,197 @@ async def periodic_task():
         make_a_promise = make_a_promise_likelihood > random.random()
         fulfil_a_promise = fulfil_a_promise_likelihood > random.random()
 
-        if channel_last:
-            message = ''
+        if channel_last is None:
+            print("Channel not found")
+            return
 
-            # Load prompts from the JSON file
-            prompt = None
-            username = None
+        message = ''
 
-            # prompt = get_director_script_prompt(director_prompts, bracket_counter)
-            if bracket_counter % director_intervention == 0:
-                prompt, username = await get_director_prompt(bracket_counter)
+        revise_memory_reply = await revise_memory()
+        if revise_memory_reply != None:
+            await send_colored_embed(channel_last, "Memory Revision",
+                                        revise_memory_reply, [], discord.Color.red())
 
-            if prompt is None:
-                prompt, username = await get_audience_prompt(bracket_counter)
+
+        # Load prompts from the JSON file
+        prompt = None
+        username = None
+
+        ego_name = parameters["ego"]["name"]
+        superego_name = parameters["superego"]["name"]
+        other_name = parameters["other"]["name"]
+        director_name = parameters["director"]["name"]
+
+        if bracket_counter == 0:
+
+            settings_messages = format_settings()
+            await send_colored_embed(channel_last, "Drama Machine Settings",
+                                    settings_messages, [], discord.Color.yellow())
+
+
+        if bracket_counter % director_intervention == 0:
+            prompt, username = await get_directors_prompt(bracket_counter)
+
+        if prompt is None:
+            prompt, username = await get_others_prompt(bracket_counter)
+            
+        ego_name = parameters["ego"]["name"]
+        superego_name = parameters["superego"]["name"]
+
+        if prompt is not None:
+            # if make_a_promise:
+            #     prompt = "Make promise: Generate a very brief note-to-self that will remind you to reflect on events to date at a future point in time."
+            # elif fulfil_a_promise and len(promises) > 0:
+            #     random_index = random.randint(0, len(promises) - 1)
+            #     prompt = promises[random_index]
+            #     prompt = "Fulfil promise: " + prompt
+            #     promises.remove(promises[random_index])
+            # else:
+            #     prompt = elapsed_time_formatted
+
+    
+            await channel_last.send(f"**Step {bracket_counter}**")
+            prompt_to_display = f"*{username}*: {prompt}"
+
+            await channel_last.send(prompt_to_display[0:2000])
+            result = ''
+            modified_prompt = prompt
+            internal_dialogue = ''
+
+
+            likelihood_to_rewrite_others_prompt = float(parameters["superego"]["likelihood_to_rewrite_others_prompt"])
+            should_we_rewrite_the_prompt = likelihood_to_rewrite_others_prompt > random.random() and bracket_counter % director_intervention != 0
+
+            likelihood_to_suggest_alternate_response = float(parameters["superego"]["likelihood_to_suggest_alternate_response"])
+            should_we_suggest_alternate_responset = likelihood_to_suggest_alternate_response > random.random() and bracket_counter % director_intervention != 0
+
+            
+            if should_we_rewrite_the_prompt:
+
+                # rewrite the prompt
+                prompt_for_rewrite_others_prompt = parameters["superego"]["prompt_for_rewrite_others_prompt"]
+                prompt_for_rewrite_others_prompt = eval(f'f"""{prompt_for_rewrite_others_prompt}"""')
+
+                messages = [{"role": "user","content":prompt_for_rewrite_others_prompt}]
+                modified_prompt = await generate_reply(
+                    parameters["superego"]["llm_settings"], 
+                    client_superego,
+                    parameters["superego"]["prompt"], 
+                    messages)
+
+            try:
+                result = await chat_prompt(modified_prompt, parameters)
+            except Exception as e:
+                print(e)
+                result = 'So sorry, dear User! ChatGPT is down.'
+
+            superego_prompt = prompt
+            superego_response = result
+            if should_we_suggest_alternate_responset:
+
+                prompt_for_suggest_alternate_response = parameters["superego"]["prompt_for_suggest_alternate_response"]
+                prompt_for_suggest_alternate_response = eval(f'f"""{prompt_for_suggest_alternate_response}"""')
+
+                # update this logic with 'internal drama'
+                superego_prompt = prompt_for_suggest_alternate_response
+                messages = [{"role": "user", "content": prompt_for_suggest_alternate_response}]
+                superego_response = await generate_reply(
+                    parameters["superego"]["llm_settings"], 
+                    client_superego,
+                    parameters["superego"]["prompt"], 
+                    messages)            
                 
-            if prompt is not None:
-                # if make_a_promise:
-                #     prompt = "Make promise: Generate a very brief note-to-self that will remind you to reflect on events to date at a future point in time."
-                # elif fulfil_a_promise and len(promises) > 0:
-                #     random_index = random.randint(0, len(promises) - 1)
-                #     prompt = promises[random_index]
-                #     prompt = "Fulfil promise: " + prompt
-                #     promises.remove(promises[random_index])
-                # else:
-                #     prompt = elapsed_time_formatted
+                internal = f"**Here's what I heard:**\n\n {modified_prompt}\n\n\n**My initial reply: **{result}\n\n\n**My super ego response: **\n\n{superego_response}"
+                await send_colored_embed(channel_last, "Internal dialogue",
+                                        internal, [], discord.Color.blue())
 
-        
-                await channel_last.send(f"**Step {bracket_counter}**")
-                prompt_to_display = f"*{username}*: {prompt}"
+                prompt_for_reflection_on_alternate_response = parameters["superego"]["prompt_for_reflection_on_alternate_response"]
+                prompt_for_reflection_on_alternate_response = eval(f'f"""{prompt_for_reflection_on_alternate_response}"""')
 
-                await channel_last.send(prompt_to_display)
-                result = ''
-                try:
-                    result = await chat_prompt(prompt, parameters)
-                except Exception as e:
-                    print(e)
-                    result = 'So sorry, dear User! ChatGPT is down.'
+                messages = [{"role": "user", "content": prompt_for_reflection_on_alternate_response}]
+                result = await generate_reply(
+                    parameters["ego"]["llm_settings"], 
+                    client_ego,
+                    parameters["ego"]["prompt"], 
+                    messages)            
+                
+            
+            ego_name = parameters["ego"]["name"]
+            result_to_display = f"*{ego_name}*: {result}"
+            chunks = split_into_chunks(result_to_display, max_length=1600)
+            for chunk in chunks:
+                await channel_last.send(chunk)
 
-                character_name = parameters["character"]["name"]
-                result_to_display = f"*{character_name}*: {result}"
-                chunks = split_into_chunks(result_to_display, max_length=1600)
-                for chunk in chunks:
-                    await channel_last.send(chunk)
-                # await channel_last.send(result_to_display)
+            content = [{
+                "type": "text",
+                "text": result
+            }]
 
-                content = [{
-                    "type": "text",
-                    "text": result
-                }]
+            content = await check_for_images(result, content)
 
-                content = await check_for_images(result, content)
+            if result != "":
+                # if len(dialogue_history) >= max_size_dialog:
+                #     dialogue_history.pop(0)
+                #     dialogue_history.pop(0)
+                dialogue_history.append({
+                    "role": "user",
+                    "name": username,
+                    "content": prompt
+                })
+                dialogue_history.append({
+                    "role": "assistant",
+                    "content": result
+                })
 
-                if result != "":
-                    # if len(dialogue_history) >= max_size_dialog:
-                    #     dialogue_history.pop(0)
-                    #     dialogue_history.pop(0)
-                    dialogue_history.append({
-                        "role": "user",
-                        "name": username,
-                        "content": prompt
-                    })
-                    dialogue_history.append({
-                        "role": "assistant",
-                        "content": result
-                    })
+                dialogue_ego.append({
+                    "role": "user",
+                    "name": username,
+                    "content": modified_prompt
+                })
+                dialogue_ego.append({
+                    "role": "assistant",
+                    "content": result
+                })
 
-                    dialogue_audience.append({
-                        "role": "assistant",
-                        "content": prompt
-                    })
-                    dialogue_audience.append({
-                        "role": "user",
-                        "name": parameters["character"]["name"],
-                        "content": content
-                    })
-                    if make_a_promise:
-                        promises.append(result)
+                dialogue_superego.append({
+                    "role": "user",
+                    "name": ego_name,
+                    "content": superego_prompt
+                })
+                dialogue_superego.append({
+                    "role": "assistant",
+                    "content": superego_response
+                })
 
+                dialogue_other.append({
+                    "role": "assistant",
+                    "content": prompt
+                })
+                dialogue_other.append({
+                    "role": "user",
+                    "name": ego_name,
+                    "content": content
+                })
 
+                dialogue_director.append({
+                    "role": "user",
+                    "name": username,
+                    "content": prompt
+                })
+                dialogue_director.append({
+                    "role": "assistant",
+                    "content": content
+                })                
 
-                reply = await write_bio()
-                if reply != None:
-                    await send_colored_embed(channel_last, "Autobiography",
-                                             reply, [], discord.Color.green())
-                    # chunks = split_into_chunks(reply, max_length=1600)
-                    # for chunk in chunks:
-                    #     await channel_last.send(chunk)
+                if make_a_promise:
+                    promises.append(result)
 
-                reply = await revise_memory()
-                if reply != None:
-                    await send_colored_embed(channel_last, "Memory Revision",
-                                             reply, [], discord.Color.red())
-                    # chunks = split_into_chunks(reply, max_length=1600)
-                    # for chunk in chunks:
-                    #     await channel_last.send(chunk)
-
-        else:
-            print("No channel_last_id")
+        write_bio_reply = await write_bio()
+        if write_bio_reply != None:
+            await send_colored_embed(channel_last, "Autobiography",
+                                        write_bio_reply, [], discord.Color.green())
+            file_name, file = await generate_script_from_dialogue(write_bio_reply)
+            await channel_last.send(file=discord.File(file, file_name))
 
         bracket_counter = bracket_counter + 1
         await asyncio.sleep(sleep_counter)  # sleep for 20 seconds
@@ -1007,11 +1179,11 @@ def get_director_script_prompt(prompts, step):
     return None
 
 # Function to get the prompt for the current step
-async def get_director_prompt(step):
+async def get_directors_prompt(step):
     try:
         director_name = parameters["director"]["name"]
-        character_name = parameters["character"]["name"]
-        audience_name = parameters["audience"]["name"]
+        ego_name = parameters["ego"]["name"]
+        other_name = parameters["other"]["name"]
 
         messages = []
 
@@ -1028,7 +1200,7 @@ async def get_director_prompt(step):
         messages.append({
             "role":
             "user",
-            "name": character_name,
+            "name": ego_name,
             "content":
             f"{prompt_for_director_instruction}"
         })
@@ -1040,69 +1212,70 @@ async def get_director_prompt(step):
         return reply, director_name
     
     except Exception as e:
-        print(e)
-        return f"Error in generating director message! {e}"
+        message = f"Error in generating director message! {e}"
+        print(message)
+        return message, director_name
 
 # Function to get the prompt for the current step
-async def get_audience_prompt(step):
-    global dialogue_audience
+async def get_others_prompt(step):
+    global dialogue_other
 
     try:
-        prompt_for_audience = parameters["audience"]["prompt"]
-        audience_name = parameters["audience"]["name"]
-        character_name = parameters["character"]["name"]
+        prompt_for_other = parameters["other"]["prompt"]
+        other_name = parameters["other"]["name"]
+        ego_name = parameters["ego"]["name"]
 
         dialog_history = print_history()
         
-        last_audience_message = None
+        last_other_message = None
         last_message_content = ''
-        if len(dialogue_audience) > 0:
-            last_audience_message = dialogue_audience.pop()
-            last_message_content_container = last_audience_message["content"]
+        if len(dialogue_other) > 0:
+            last_other_message = dialogue_other.pop()
+            last_message_content_container = last_other_message["content"]
             if isinstance(last_message_content_container, list):
                 for message in last_message_content_container:
                     if message["type"] == "text":
                         last_message_content = message["text"]
 
-        prompt_for_audience_message = parameters["audience"]["prompt_for_audience_message"]
-        prompt_for_audience_message = eval(
-            f'f"""{prompt_for_audience_message}"""')
+        prompt_for_other_message = parameters["other"]["prompt_for_message"]
+        prompt_for_other_message = eval(
+            f'f"""{prompt_for_other_message}"""')
 
-        if last_audience_message == None:
-            if 'claude' in parameters["audience"]["llm_settings"]["model"]:
-                last_audience_message = {
+        if last_other_message == None:
+            if 'claude' in parameters["other"]["llm_settings"]["model"]:
+                last_other_message = {
                     "role": "user",
                     "content": [
                         {"type": "text", 
-                        "text": f"{character_name}: {prompt_for_audience_message}"}
+                        "text": f"{ego_name}: {prompt_for_other_message}"}
                     ]
                 }
             else:
-                last_audience_message = {
+                last_other_message = {
                     "role": "user",
-                    "name": character_name,
+                    "name": ego_name,
                     "content": [
                         {"type": "text", 
-                        "text": f"{prompt_for_audience_message}"}
+                        "text": f"{prompt_for_other_message}"}
                     ]
                 }
         else:
-            for message in last_audience_message["content"]:
+            for message in last_other_message["content"]:
                 if message["type"] == "text":
-                    message["text"] = prompt_for_audience_message
+                    message["text"] = prompt_for_other_message
 
-        dialogue_audience.append(last_audience_message)
+        dialogue_other.append(last_other_message)
 
-        reply = await generate_reply(parameters["audience"]["llm_settings"],
-                                    client_audience, prompt_for_audience,
-                                    dialogue_audience)
+        reply = await generate_reply(parameters["other"]["llm_settings"],
+                                    client_other, prompt_for_other,
+                                    dialogue_other)
 
-        return reply, audience_name
+        return reply, other_name
     
     except Exception as e:
-        error_message = f"Error in generating audience message! {e}"
+        error_message = f"Error in generating other's message! {e}"
         print(error_message)
-        return error_message, audience_name
+        return error_message, other_name
 
 def generate_client(model):
     client = None
@@ -1110,23 +1283,25 @@ def generate_client(model):
         client = anthropic.Anthropic(
             api_key=os.getenv('ANTHROPIC_API_KEY'))
     elif 'gpt' in model:
-        # client_character = OpenAI(api_key = os.environ.get("OPENAI_API_KEY"))
         client = AsyncOpenAI(
             api_key=os.environ.get("OPENAI_API_KEY"))
-    else:
-        # client_character = Groq(api_key=os.getenv('GROQ_API_KEY'))
+    elif 'llama3-' in model:
         client = AsyncGroq(api_key=os.getenv('GROQ_API_KEY'))
+    else:
+        # Hardwired for the moment
+        client = AsyncOpenAI(
+            base_url="http://localhost:1234/v1", api_key="lm-studio")
     return client
 
 def reload_settings():
-    global client_character, client_narrator, client_audience, client_director
+    global client_ego, client_superego, client_other, client_director
     global parameters
     global guild_id, channel_ids
     global sleep_counter, make_a_promise_likelihood, fulfil_a_promise_likelihood
     global director_prompts
     global subject
     global bracket_counter
-    global dialogue_history, dialogue_narrator, dialogue_audience, dialogue_director
+    global dialogue_history, dialogue_ego, dialogue_superego, dialogue_other, dialogue_director
 
     # Load the settings file
     try:
@@ -1149,40 +1324,52 @@ def reload_settings():
         print(e)
         pass
 
-    parameters["character"]["prompt"] = load_markdown_content(
-        parameters["character"]["prompt"])
-    parameters["narrator"]["prompt"] = load_markdown_content(
-        parameters["narrator"]["prompt"])
-    parameters["narrator"]["prompt_for_bio"] = load_markdown_content(
-        parameters["narrator"]['prompt_for_bio'])
-    parameters["narrator"]["prompt_for_rewrite_memory"] = load_markdown_content(
-        parameters["narrator"]['prompt_for_rewrite_memory'])
-    parameters["narrator"]["prompt_for_rewrite_memory_self"] = load_markdown_content(
-        parameters["narrator"]['prompt_for_rewrite_memory_self'])
-    parameters["audience"]["prompt"] = load_markdown_content(
-        parameters["audience"]["prompt"])
-    parameters["audience"]["prompt_for_audience_message"] = load_markdown_content(
-        parameters["audience"]['prompt_for_audience_message'])
+    parameters["ego"]["prompt"] = load_markdown_content(
+        parameters["ego"]["prompt"])
+    parameters["ego"]["prompt_for_bio"] = load_markdown_content(
+        parameters["ego"]['prompt_for_bio'])
+
+    parameters["superego"]["prompt"] = load_markdown_content(
+        parameters["superego"]["prompt"])
+    parameters["superego"]["prompt_for_rewrite_memory"] = load_markdown_content(
+        parameters["superego"]['prompt_for_rewrite_memory'])
+    parameters["superego"]["prompt_for_rewrite_memory_self"] = load_markdown_content(
+        parameters["superego"]['prompt_for_rewrite_memory_self'])
+    parameters["superego"]["prompt_for_rewrite_others_prompt"] = load_markdown_content(
+        parameters["superego"]['prompt_for_rewrite_others_prompt'])
+    parameters["superego"]["prompt_for_suggest_alternate_response"] = load_markdown_content(
+        parameters["superego"]['prompt_for_suggest_alternate_response'])
+    parameters["superego"]["prompt_for_reflection_on_alternate_response"] = load_markdown_content(
+        parameters["superego"]['prompt_for_reflection_on_alternate_response'])
+
+    parameters["other"]["prompt"] = load_markdown_content(
+        parameters["other"]["prompt"])
+    parameters["other"]["prompt_for_message"] = load_markdown_content(
+        parameters["other"]['prompt_for_message'])
     parameters["director"]["prompt"] = load_markdown_content(parameters["director"]["prompt"])
     parameters["director"]["prompt_for_director_instruction"] = load_markdown_content(parameters["director"]["prompt_for_director_instruction"])
     parameters["director"]["prompt_for_director_image_generation"] = load_markdown_content(parameters["director"]["prompt_for_director_image_generation"])
 
     # Reset dialogue
     dialogue_history = []
-    dialogue_narrator = []
-    dialogue_audience = []
+    dialogue_ego = []
+    dialogue_superego = []
+    dialogue_other = []
     dialogue_director = []    
+
+    # Add an initial 'user' message to the other's conversation
+    dialogue_other.append({"role": "user", "content": "[Start the conversation]"}) 
 
     # Load prompts from the JSON file
 
     director_prompts = load_prompts(parameters["director"]['director_script'])
 
-    client_character = generate_client(parameters["character"]["llm_settings"]["model"])
-    client_narrator = generate_client(parameters["narrator"]["llm_settings"]["model"])
-    client_audience = generate_client(parameters["audience"]["llm_settings"]["model"])
+    client_ego = generate_client(parameters["ego"]["llm_settings"]["model"])
+    client_superego = generate_client(parameters["superego"]["llm_settings"]["model"])
+    client_other = generate_client(parameters["other"]["llm_settings"]["model"])
     client_director = generate_client(parameters["director"]["llm_settings"]["model"])
 
-    bracket_counter = 1
+    bracket_counter = 0
 
 
 def main():

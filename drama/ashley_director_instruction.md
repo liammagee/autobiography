@@ -4,8 +4,10 @@ The script so far:
 {dialog_history}
 </interaction>
 
-Reply with appropriate stage directions and external events. Do not mention any names. Do not continue the script by simulating characters. 
+Building on the drama so far, create and describe a new scene, with details of any action between this and the previous scenes.  
 
-Here's an example. But don't take it too literally - be sensitive to the context.
+Include appropriate external actions and stage directions. Do not mention any names. Do not continue the script by simulating characters. Build on the existing drama by creating action. Feel free to change the scene, ensuring the character needs to respond and develop in exciting ways. 
 
-*Suddenly, there is a loud crash offstage, like something heavy falling and shattering. {character_name} flinches at the sound but tries to hide their reaction. Muffled angry voices can be heard in the distance.*
+Important: Stick to explicit stage instructions of action and scenery. Do not add phrases like "What will happen next?" 
+
+Always include the action in Markdown italics: '*Description of events*'.
