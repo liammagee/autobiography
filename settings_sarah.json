@@ -77,7 +77,7 @@
         "director_script": "drama/script_none.json",
         "llm_settings": {
             "model":"claude-3-5-sonnet-20240620",
-            "stop_sequences": ["\n"],
+            "stop_sequences": [],
             "max_tokens": 500,
             "temperature": 1.0,
             "top_p": 1.0,
