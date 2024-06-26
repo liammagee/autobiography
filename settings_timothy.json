@@ -15,8 +15,8 @@
 
     "ego": {
         "name": "Jenny",
-        "prompt": "drama/jenny_middleaged.md",
-        "prompt_for_bio": "drama/ben_bio.md",
+        "prompt": "drama/timothy_mischief.md",
+        "prompt_for_bio": "drama/generic_bio.md",
         "generate_images": false,
         "write_bio_schedule": 21, 
         "llm_settings": {
@@ -33,9 +33,16 @@
         "prompt": "drama/ben_moderator.md",
         "prompt_for_rewrite_memory": "drama/ben_rewrite_memory_3.md",
         "prompt_for_rewrite_memory_self": "drama/ben_rewrite_memory_self.md",
-        "prompt_for_rewrite_chat": "drama/ben_rewrite_chat.md",
-        "prompt_for_rewrite_chat_likelihood": 1.0,
+
+        "likelihood_to_rewrite_others_prompt": 0.3,
+        "prompt_for_rewrite_others_prompt": "drama/ben_rewrite_others_prompt.md",
+
+        "likelihood_to_suggest_alternate_response": 1.0,
+        "prompt_for_suggest_alternate_response": "drama/ben_rewrite_others_prompt.md",
+        "prompt_for_reflection_on_alternate_response": "drama/timothy/timmy_reflection_on_alternate_response.md",
+
         "rewrite_memory_schedule": 21,
+
         "llm_settings": {
             "model":"gpt-4o",
             "stop_sequences": ["\n"],
@@ -53,7 +60,7 @@
         "turn_limit": 5,
         "llm_settings": {
             "model":"claude-3-5-sonnet-20240620",
-            "stop_sequences": ["\n"],
+            "stop_sequences": [],
             "max_tokens": 250,
             "temperature": 0.7,
             "top_p": 1.0,

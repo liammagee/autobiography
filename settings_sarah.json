@@ -1,42 +1,88 @@
 {
-    "name": "Timothy",
+
     "guild_id": "1015035862536437810",                 
     "discord_token_env_var": "DISCORD_BOTOKEN_TIMOTHY",
-    "channel_ids": [1245541912786636890],
-    "max_size_dialog": 40000,
+    "channel_ids": [1244445094942343218],
 
+    "max_size_dialog": 400000,
 
+    
 
-    "prompt_for_character": "drama/sarah_claude.md",
-    "prompt_for_narrator": "drama/ben_inner_voice.md",
-    "prompt_for_narrator_bio": "drama/ben_bio.md",
-    "prompt_for_narrator_rewrite_memory": "drama/ben_rewrite_memory.md",
-    "director_script": "drama/script_claude.json",
-    "write_bio_schedule": 3,
-    "rewrite_memory_schedule": 3,
-
-    "sleep_counter": 5,
+    "sleep_counter": 1,
     "make_a_promise_likelihood": 0.0,
     "fulfil_a_promise_likelihood": 0.0,
     
 
-    "gpt_settings_character": {
-        "model":"llama3-70b-8192",
-        "stop_sequences": ["\n"],
-        "max_tokens": 512,
-        "temperature": 1.0,
-        "top_p": 1.0,
-        "frequency_penalty": 2.0,
-        "presence_penalty": 2.0
+    "ego": {
+        "name": "Sarah",
+        "prompt": "drama/sarah_claude.md",
+        "prompt_for_bio": "drama/generic_bio.md",
+        "generate_images": false,
+        "write_bio_schedule": 21, 
+        "llm_settings": {
+            "model":"llama3-8b-8192",
+            "max_tokens": 250,
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "frequency_penalty": 2.0,
+            "presence_penalty": 2.0
+        }
     },
-    "gpt_settings_narrator": {
-        "model":"claude-3-opus-20240229",
-        "stop_sequences": ["\n"],
-        "max_tokens": 1024,
-        "temperature": 1.0,
-        "top_p": 1.0,
-        "frequency_penalty": 2.0,
-        "presence_penalty": 2.0
-    }
+    "superego": {
+        "name": "Ben",
+        "prompt": "drama/ben_moderator.md",
+        "prompt_for_rewrite_memory": "drama/ben_rewrite_memory_3.md",
+        "prompt_for_rewrite_memory_self": "drama/ben_rewrite_memory_self.md",
 
+        "likelihood_to_rewrite_others_prompt": 0.3,
+        "prompt_for_rewrite_others_prompt": "drama/ben_rewrite_others_prompt.md",
+
+        "likelihood_to_suggest_alternate_response": 1.0,
+        "prompt_for_suggest_alternate_response": "drama/ben_rewrite_others_prompt.md",
+        "prompt_for_reflection_on_alternate_response": "drama/timothy/timmy_reflection_on_alternate_response.md",
+
+        "rewrite_memory_schedule": 21,
+
+        "llm_settings": {
+            "model":"gpt-4o",
+            "stop_sequences": ["\n"],
+            "max_tokens": 500,
+            "temperature": 0.3,
+            "top_p": 1.0,
+            "frequency_penalty": 2.0,
+            "presence_penalty": 2.0
+        }
+    },
+    "other": {
+        "name": "Sasha",
+        "prompt": "drama/sasha_interviewer.md",
+        "prompt_for_message": "drama/sasha_interviewer_query.md",
+        "turn_limit": 5,
+        "llm_settings": {
+            "model":"claude-3-5-sonnet-20240620",
+            "stop_sequences": [],
+            "max_tokens": 250,
+            "temperature": 0.7,
+            "top_p": 1.0,
+            "frequency_penalty": 2.0,
+            "presence_penalty": 2.0
+        }
+    },
+    "director": {
+        "name": "Director",
+        "prompt": "drama/ashley_director_interview.md",
+        "prompt_for_director_instruction": "drama/ashley_director_instruction.md",
+        "prompt_for_director_image_generation": "drama/ashley_director_image_generation.md",
+        "intervention": 21,
+        "director_script": "drama/script_none.json",
+        "llm_settings": {
+            "model":"claude-3-5-sonnet-20240620",
+            "stop_sequences": ["\n"],
+            "max_tokens": 500,
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "frequency_penalty": 2.0,
+            "presence_penalty": 2.0
+        }
+    }
 }
