@@ -14,7 +14,7 @@
     
 
     "ego": {
-        "name": "Jenny",
+        "name": "Timothy",
         "prompt": "drama/timothy_mischief.md",
         "prompt_for_bio": "drama/generic_bio.md",
         "generate_images": false,
